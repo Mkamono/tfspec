@@ -1,0 +1,15 @@
+# 複数行コメントのテスト
+# これは2行目のコメント
+# これは3行目のコメント
+aws_instance.web.instance_type
+
+# 単一行コメント
+aws_instance.web.tags.Environment
+
+aws_instance.db.instance_type  # 行末コメント
+aws_instance.cache.instance_type # これも行末コメント
+
+# 空行で区切られたコメント
+
+# 新しいセクション
+aws_security_group.web.ingress[443]

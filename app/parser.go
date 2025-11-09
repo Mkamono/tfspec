@@ -192,7 +192,7 @@ func parseIgnoreContentWithComments(content string, ruleComments map[string]stri
 			continue
 		}
 
-		// コメント行の場合は蓄積
+		// コメント行の場合は蓄積（連続する#コメントを結合）
 		if strings.HasPrefix(line, "#") {
 			comment := strings.TrimPrefix(line, "#")
 			comment = strings.TrimSpace(comment)
@@ -204,8 +204,29 @@ func parseIgnoreContentWithComments(content string, ruleComments map[string]stri
 			continue
 		}
 
-		// ルール行の場合、直前のコメントと関連付け
-		ruleComments[line] = currentComment
+		// 行末コメントをチェック
+		var rule, inlineComment string
+		if hashIndex := strings.Index(line, "#"); hashIndex != -1 {
+			rule = strings.TrimSpace(line[:hashIndex])
+			inlineComment = strings.TrimSpace(strings.TrimPrefix(line[hashIndex:], "#"))
+		} else {
+			rule = line
+		}
+
+		// 空のルールはスキップ
+		if rule == "" {
+			continue
+		}
+
+		// コメントを決定（行末コメント優先、なければ直前のコメント）
+		var finalComment string
+		if inlineComment != "" {
+			finalComment = inlineComment
+		} else {
+			finalComment = currentComment
+		}
+
+		ruleComments[rule] = finalComment
 		currentComment = "" // コメントをリセット
 	}
 }
@@ -220,6 +241,16 @@ func parseIgnoreContent(content string) []string {
 
 		// 空行やコメント行をスキップ
 		if line == "" || strings.HasPrefix(line, "#") {
+			continue
+		}
+
+		// 行末コメントを除去
+		if hashIndex := strings.Index(line, "#"); hashIndex != -1 {
+			line = strings.TrimSpace(line[:hashIndex])
+		}
+
+		// 空のルールはスキップ
+		if line == "" {
 			continue
 		}
 
