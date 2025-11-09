@@ -8,8 +8,8 @@
 
 | 該当箇所 | env1 | env2 | env3 | 理由 |
 |----------|-------|-------|-------|------|
-| aws_security_group.web.ingress[1] | (存在しない) | block_exists | block_exists | - |
-| aws_security_group.web.ingress[2] | (存在しない) | (存在しない) | block_exists | - |
+| aws_security_group.web.ingress[1] | - | { cidr_blocks: [["0.0.0.0/0"]],<br>&nbsp;&nbsp;from_port: 443,<br>&nbsp;&nbsp;protocol: "tcp",<br>&nbsp;&nbsp;to_port: 443 } | { cidr_blocks: [["0.0.0.0/0"]],<br>&nbsp;&nbsp;from_port: 443,<br>&nbsp;&nbsp;protocol: "tcp",<br>&nbsp;&nbsp;to_port: 443 } | SSL/TLS通信要件による意図的差分（開発環境はHTTPのみ、インデックス1は2番目のingressブロック） |
+| aws_security_group.web.ingress[2] | - | - | { cidr_blocks: [["172.16.0.0/12"]],<br>&nbsp;&nbsp;from_port: 8080,<br>&nbsp;&nbsp;protocol: "tcp",<br>&nbsp;&nbsp;to_port: 8080 } | 本番環境での管理インターフェースアクセス（他環境では不要、インデックス2は3番目のingressブロック） |
 | aws_security_group.web.tags.AllowedPorts | 80 | 80,443 | 80,443,8080 | 許可ポート設定の環境別要件 |
 | aws_security_group.web.tags.Environment | env1 | env2 | env3 | 環境識別タグの意図的差分 |
 

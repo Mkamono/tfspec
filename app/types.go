@@ -21,7 +21,6 @@ type EnvBlock struct {
 	Type   string
 	Labels []string
 	Attrs  map[string]cty.Value
-	Blocks map[string][]*EnvBlock
 }
 
 type DiffResult struct {
@@ -33,6 +32,3 @@ type DiffResult struct {
 	IsIgnored   bool // 新設計：.tfspecignoreに記載されているかどうか
 }
 
-type Config struct {
-	EnvDirs []string
-}

@@ -68,47 +68,105 @@ func (app *TfspecApp) CreateRootCommand() *cobra.Command {
 	return rootCmd
 }
 
-func (app *TfspecApp) runCheck(envDirs []string, verbose bool, outputFile string, outputFlag bool, noFail bool) error {
+func (app *TfspecApp) runCheck(envDirs []string, _ bool, outputFile string, outputFlag bool, noFail bool) error {
+	tfspecDir, err := app.setupTfspecDir()
+	if err != nil {
+		return err
+	}
+
+	ignoreRules, ruleComments, err := app.loadIgnoreRules(tfspecDir)
+	if err != nil {
+		return err
+	}
+
+	app.differ = NewHCLDiffer(ignoreRules)
+
+	envDirs, err = app.resolveEnvDirs(envDirs)
+	if err != nil {
+		return err
+	}
+
+	envResources, err := app.parseEnvironments(envDirs)
+	if err != nil {
+		return err
+	}
+
+	diffs, err := app.differ.Compare(envResources)
+	if err != nil {
+		return fmt.Errorf("差分検出に失敗しました: %w", err)
+	}
+
+	ignoredDiffs, driftDiffs := app.classifyDiffs(diffs)
+	envNames := app.extractEnvNames(envResources)
+
+	if err := app.outputResults(diffs, envNames, ruleComments, envResources, outputFile, outputFlag); err != nil {
+		return err
+	}
+
+	app.printSummary(ignoredDiffs, driftDiffs)
+
+	if len(driftDiffs) > 0 && !noFail {
+		return fmt.Errorf("%d件の構成ドリフトが検出されました", len(driftDiffs))
+	}
+
+	return nil
+}
+
+// setupTfspecDir は.tfspecディレクトリの存在を確認し、パスを返す
+func (app *TfspecApp) setupTfspecDir() (string, error) {
 	cwd, err := os.Getwd()
 	if err != nil {
-		return fmt.Errorf("現在のディレクトリを取得できません: %w", err)
+		return "", fmt.Errorf("現在のディレクトリを取得できません: %w", err)
 	}
 
 	tfspecDir := filepath.Join(cwd, ".tfspec")
 	if _, err := os.Stat(tfspecDir); os.IsNotExist(err) {
-		return fmt.Errorf(".tfspecディレクトリが見つかりません: %s", tfspecDir)
+		return "", fmt.Errorf(".tfspecディレクトリが見つかりません: %s", tfspecDir)
 	}
 
-	// .tfspecignoreルールを読み込み
+	return tfspecDir, nil
+}
+
+// loadIgnoreRules は無視ルールとコメントを読み込む
+func (app *TfspecApp) loadIgnoreRules(tfspecDir string) ([]string, map[string]string, error) {
 	ignoreRules, err := LoadIgnoreRules(tfspecDir)
 	if err != nil {
-		return fmt.Errorf(".tfspecignoreの読み込みに失敗しました: %w", err)
+		return nil, nil, fmt.Errorf(".tfspecignoreの読み込みに失敗しました: %w", err)
 	}
 
-	// コメント付きルールもロード
 	ruleComments, err := LoadIgnoreRulesWithComments(tfspecDir)
 	if err != nil {
-		return fmt.Errorf(".tfspecignoreのコメント読み込みに失敗しました: %w", err)
+		return nil, nil, fmt.Errorf(".tfspecignoreのコメント読み込みに失敗しました: %w", err)
 	}
 
-	// differをignoreRulesで初期化
-	app.differ = NewHCLDiffer(ignoreRules)
+	fmt.Printf("無視ルール: %d件\n", len(ignoreRules))
+	return ignoreRules, ruleComments, nil
+}
 
+// resolveEnvDirs は環境ディレクトリを解決する
+func (app *TfspecApp) resolveEnvDirs(envDirs []string) ([]string, error) {
 	if len(envDirs) == 0 {
+		cwd, err := os.Getwd()
+		if err != nil {
+			return nil, fmt.Errorf("現在のディレクトリを取得できません: %w", err)
+		}
+
 		envDirs, err = app.detectEnvDirs(cwd)
 		if err != nil {
-			return fmt.Errorf("環境ディレクトリの検出に失敗しました: %w", err)
+			return nil, fmt.Errorf("環境ディレクトリの検出に失敗しました: %w", err)
 		}
 	}
 
 	if len(envDirs) == 0 {
-		return fmt.Errorf("環境ディレクトリが見つかりません")
+		return nil, fmt.Errorf("環境ディレクトリが見つかりません")
 	}
 
 	fmt.Printf("環境ディレクトリ: %v\n", envDirs)
-	fmt.Printf("無視ルール: %d件\n", len(ignoreRules))
+	return envDirs, nil
+}
 
-	// 全環境のリソースを解析
+// parseEnvironments は全環境のリソースを解析する
+func (app *TfspecApp) parseEnvironments(envDirs []string) (map[string]*EnvResources, error) {
 	envResources := make(map[string]*EnvResources)
 	for _, envDir := range envDirs {
 		envName := filepath.Base(envDir)
@@ -121,19 +179,16 @@ func (app *TfspecApp) runCheck(envDirs []string, verbose bool, outputFile string
 
 		envResource, err := app.parser.ParseEnvFile(envFile)
 		if err != nil {
-			return fmt.Errorf("環境ファイルの解析に失敗しました (%s): %w", envFile, err)
+			return nil, fmt.Errorf("環境ファイルの解析に失敗しました (%s): %w", envFile, err)
 		}
 
 		envResources[envName] = envResource
 	}
+	return envResources, nil
+}
 
-	// 環境間差分を検出
-	diffs, err := app.differ.Compare(envResources)
-	if err != nil {
-		return fmt.Errorf("差分検出に失敗しました: %w", err)
-	}
-
-	// 結果を分類
+// classifyDiffs は差分を分類する
+func (app *TfspecApp) classifyDiffs(diffs []*DiffResult) ([]*DiffResult, []*DiffResult) {
 	var ignoredDiffs, driftDiffs []*DiffResult
 	for _, diff := range diffs {
 		if diff.IsIgnored {
@@ -142,26 +197,27 @@ func (app *TfspecApp) runCheck(envDirs []string, verbose bool, outputFile string
 			driftDiffs = append(driftDiffs, diff)
 		}
 	}
+	return ignoredDiffs, driftDiffs
+}
 
-	// 環境名のリストを作成
+// extractEnvNames は環境名リストを抽出してソートする
+func (app *TfspecApp) extractEnvNames(envResources map[string]*EnvResources) []string {
 	envNames := make([]string, 0, len(envResources))
 	for envName := range envResources {
 		envNames = append(envNames, envName)
 	}
 	sort.Strings(envNames)
+	return envNames
+}
 
-	// テーブル形式でデータを構築
-	driftTable, ignoredTable := app.buildTables(diffs, envNames, ruleComments, envResources)
+// outputResults は結果を出力する
+func (app *TfspecApp) outputResults(diffs []*DiffResult, envNames []string, ruleComments map[string]string, envResources map[string]*EnvResources, outputFile string, outputFlag bool) error {
+	reporter := NewResultReporter()
+	markdownOutput := reporter.GenerateMarkdown(diffs, envNames, ruleComments, envResources, app)
 
-	// Markdownテーブル出力
-	markdownOutput := app.generateMarkdownTables(driftTable, ignoredTable, envNames)
-
-	// 標準出力にMarkdownテーブルを表示
 	fmt.Print(markdownOutput)
 
-	// -oオプションが指定されていればファイルに出力
 	if outputFlag {
-		// .tfspecディレクトリが存在しない場合は作成（.tfspec/report.mdを出力する可能性があるため）
 		if strings.Contains(outputFile, ".tfspec/") {
 			if err := os.MkdirAll(".tfspec", 0755); err != nil {
 				return fmt.Errorf(".tfspecディレクトリの作成に失敗しました: %w", err)
@@ -173,17 +229,14 @@ func (app *TfspecApp) runCheck(envDirs []string, verbose bool, outputFile string
 		}
 		fmt.Printf("結果を %s に出力しました。\n", outputFile)
 	}
+	return nil
+}
 
-	// 従来の簡潔なサマリー
+// printSummary はサマリーを出力する
+func (app *TfspecApp) printSummary(ignoredDiffs, driftDiffs []*DiffResult) {
 	fmt.Printf("\n=== サマリー ===\n")
 	fmt.Printf("意図的な差分: %d件\n", len(ignoredDiffs))
 	fmt.Printf("構成ドリフト: %d件\n", len(driftDiffs))
-
-	if len(driftDiffs) > 0 && !noFail {
-		return fmt.Errorf("%d件の構成ドリフトが検出されました", len(driftDiffs))
-	}
-
-	return nil
 }
 
 func (app *TfspecApp) detectEnvDirs(baseDir string) ([]string, error) {
@@ -214,31 +267,15 @@ func (app *TfspecApp) detectEnvDirs(baseDir string) ([]string, error) {
 	return envDirs, nil
 }
 
-func (app *TfspecApp) printDiff(diff *DiffResult) {
-	status := "❌"
-	if diff.IsIgnored {
-		status = "✅"
-	}
-
-	fmt.Printf("%s [%s] %s.%s\n", status, diff.Environment, diff.Resource, diff.Path)
-	fmt.Printf("   期待値: %s\n", app.formatValue(diff.Expected))
-	fmt.Printf("   実際値: %s\n", app.formatValue(diff.Actual))
-	if diff.IsIgnored {
-		fmt.Printf("   状態: 意図的な差分（.tfspecignoreで無視）\n")
-	} else {
-		fmt.Printf("   状態: 構成ドリフト（予期しない差分）\n")
-	}
-	fmt.Println()
-}
 
 func (app *TfspecApp) formatValue(val interface{}) string {
 	if val == nil {
-		return "(存在しない)"
+		return ""
 	}
 
 	if ctyVal, ok := val.(cty.Value); ok {
 		if ctyVal.IsNull() {
-			return "(存在しない)"
+			return ""
 		}
 		if ctyVal.Type() == cty.String {
 			return ctyVal.AsString()
@@ -282,217 +319,3 @@ func (app *TfspecApp) formatValue(val interface{}) string {
 	return fmt.Sprintf("%v", val)
 }
 
-// 差分データをテーブル形式に変換
-func (app *TfspecApp) buildTables(diffs []*DiffResult, envNames []string, ruleComments map[string]string, envResources map[string]*EnvResources) ([]TableRow, []TableRow) {
-	driftRows := make(map[string]*TableRow)
-	ignoredRows := make(map[string]*TableRow)
-
-	for _, diff := range diffs {
-		fullPath := diff.Resource + "." + diff.Path
-		key := fullPath
-
-		var targetMap map[string]*TableRow
-		if diff.IsIgnored {
-			targetMap = ignoredRows
-		} else {
-			targetMap = driftRows
-		}
-
-		// 既存の行を取得または新規作成
-		row, exists := targetMap[key]
-		if !exists {
-			row = &TableRow{
-				Resource: diff.Resource,
-				Path:     diff.Path,
-				Values:   make(map[string]string),
-				Comment:  "",
-			}
-			targetMap[key] = row
-
-			// 無視された差分の場合、コメントを設定
-			if diff.IsIgnored {
-				for rule, comment := range ruleComments {
-					if strings.Contains(rule, diff.Resource) && strings.Contains(rule, diff.Path) {
-						row.Comment = comment
-						break
-					}
-				}
-			}
-		}
-
-		// 差分の期待値と実際値を適切に設定
-		// Expected（基準環境の値）とActual（現在環境の値）を両方記録
-		row.Values[diff.Environment] = app.formatValue(diff.Actual)
-
-		// 基準環境の値も記録（環境名を推測）
-		if !diff.Expected.IsNull() {
-			// 基準環境は通常最初の環境（アルファベット順で最初）
-			baseEnv := envNames[0]
-			if _, exists := row.Values[baseEnv]; !exists {
-				row.Values[baseEnv] = app.formatValue(diff.Expected)
-			}
-		}
-	}
-
-	// 差分があるパスについて、全環境の値を収集
-	app.fillMissingValues(driftRows, envNames, envResources)
-	app.fillMissingValues(ignoredRows, envNames, envResources)
-
-	// マップからスライスに変換
-	var driftTable, ignoredTable []TableRow
-	for _, row := range driftRows {
-		driftTable = append(driftTable, *row)
-	}
-	for _, row := range ignoredRows {
-		ignoredTable = append(ignoredTable, *row)
-	}
-
-	// ソート
-	sort.Slice(driftTable, func(i, j int) bool {
-		return driftTable[i].Resource+"."+driftTable[i].Path < driftTable[j].Resource+"."+driftTable[j].Path
-	})
-	sort.Slice(ignoredTable, func(i, j int) bool {
-		return ignoredTable[i].Resource+"."+ignoredTable[i].Path < ignoredTable[j].Resource+"."+ignoredTable[j].Path
-	})
-
-	return driftTable, ignoredTable
-}
-
-// 欠損している環境の値を補填
-func (app *TfspecApp) fillMissingValues(rows map[string]*TableRow, envNames []string, envResources map[string]*EnvResources) {
-	for _, row := range rows {
-		for _, envName := range envNames {
-			// 既に値が設定されている場合はスキップ
-			if _, exists := row.Values[envName]; exists {
-				continue
-			}
-
-			// 環境から該当するリソースと属性を取得
-			if envResource, exists := envResources[envName]; exists {
-				resource := app.findResource(envResource, row.Resource)
-				if resource != nil {
-					value := app.getResourceValue(resource, row.Path)
-					if !value.IsNull() {
-						row.Values[envName] = app.formatValue(value)
-					} else {
-						row.Values[envName] = "(存在しない)"
-					}
-				} else {
-					row.Values[envName] = "(存在しない)"
-				}
-			}
-		}
-	}
-}
-
-// リソースを名前で検索
-func (app *TfspecApp) findResource(envResources *EnvResources, resourceName string) *EnvResource {
-	for _, resource := range envResources.Resources {
-		fullName := resource.Type + "." + resource.Name
-		if fullName == resourceName {
-			return resource
-		}
-	}
-	return nil
-}
-
-// リソースから指定パスの値を取得
-func (app *TfspecApp) getResourceValue(resource *EnvResource, path string) cty.Value {
-	if path == "" {
-		return cty.NullVal(cty.String)
-	}
-
-	// 属性の値を取得
-	if value, exists := resource.Attrs[path]; exists {
-		return value
-	}
-
-	// ブロックの値も確認（簡易版）
-	// より複雑なパス解析が必要な場合は差分検出ロジックから移植
-	return cty.NullVal(cty.String)
-}
-
-// Markdownテーブルを生成
-func (app *TfspecApp) generateMarkdownTables(driftTable, ignoredTable []TableRow, envNames []string) string {
-	var md strings.Builder
-
-	md.WriteString("# Tfspec Check Results\n\n")
-
-	// 意図されていない差分テーブル
-	if len(driftTable) > 0 {
-		md.WriteString("## 🚨 意図されていない差分\n\n")
-		md.WriteString("| 該当箇所 |")
-		for _, env := range envNames {
-			md.WriteString(" " + env + " |")
-		}
-		md.WriteString("\n")
-
-		md.WriteString("|----------|")
-		for range envNames {
-			md.WriteString("-------|")
-		}
-		md.WriteString("\n")
-
-		for _, row := range driftTable {
-			fullPath := row.Resource
-			if row.Path != "" {
-				fullPath += "." + row.Path
-			}
-			md.WriteString("| " + fullPath + " |")
-
-			for _, env := range envNames {
-				value := row.Values[env]
-				if value == "" {
-					value = "-"
-				}
-				md.WriteString(" " + value + " |")
-			}
-			md.WriteString("\n")
-		}
-		md.WriteString("\n")
-	} else {
-		md.WriteString("## ✅ 意図されていない差分\n\n")
-		md.WriteString("意図されていない差分は検出されませんでした。\n\n")
-	}
-
-	// 無視された差分テーブル
-	if len(ignoredTable) > 0 {
-		md.WriteString("## 📝 無視された差分（意図的）\n\n")
-		md.WriteString("| 該当箇所 |")
-		for _, env := range envNames {
-			md.WriteString(" " + env + " |")
-		}
-		md.WriteString(" 理由 |\n")
-
-		md.WriteString("|----------|")
-		for range envNames {
-			md.WriteString("-------|")
-		}
-		md.WriteString("------|\n")
-
-		for _, row := range ignoredTable {
-			fullPath := row.Resource
-			if row.Path != "" {
-				fullPath += "." + row.Path
-			}
-			md.WriteString("| " + fullPath + " |")
-
-			for _, env := range envNames {
-				value := row.Values[env]
-				if value == "" {
-					value = "-"
-				}
-				md.WriteString(" " + value + " |")
-			}
-
-			comment := row.Comment
-			if comment == "" {
-				comment = "-"
-			}
-			md.WriteString(" " + comment + " |\n")
-		}
-		md.WriteString("\n")
-	}
-
-	return md.String()
-}

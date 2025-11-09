@@ -4,5 +4,5 @@
 
 | 該当箇所 | env1 | env2 | env3 |
 |----------|-------|-------|-------|
-| aws_cloudwatch_metric_alarm.high_cpu | false | (存在しない) | true |
+| aws_cloudwatch_metric_alarm.high_cpu | false | - | true |
 

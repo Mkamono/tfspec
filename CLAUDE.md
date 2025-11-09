@@ -33,23 +33,32 @@ tfspecは、Terraformの環境間構成差分を自動検出し、「意図的�
 # ディレクトリ構造
 ```
 tfspec/
-├── main.go          # エントリーポイント（現在は空の実装）
+├── main.go          # エントリーポイント
 ├── go.mod           # Goモジュール定義（Go 1.25.1）
-├── app/             # アプリケーションコード（将来の実装場所）
+├── app/             # アプリケーションコード
+│   ├── cmd.go          # コマンドライン処理・UI
+│   ├── differ.go       # 差分検出ロジック
+│   ├── parser.go       # HCL解析・.tfspecignore読み込み
+│   ├── types.go        # データ構造定義
+│   ├── reporter.go     # Markdownレポート生成
+│   └── ignore_matcher.go  # 無視ルール判定
 ├── docs/            # HCLライブラリの技術文書
 │   └── hcl_deepwiki.md  # HCLライブラリの詳細仕様
 └── test/            # テストケース群
     ├── basic_attribute_diff/      # 基本的な属性差分
-    ├── env_patterns/             # 環境パターン
-    ├── invalid_spec/             # 無効な仕様書
-    ├── list_diff/                # リスト差分
-    ├── multiple_attribute_diff/  # 複数属性差分
-    ├── multiple_spec_files/      # 複数仕様書ファイル
-    ├── nested_block_diff/        # ネストブロック差分
-    ├── partial_existence_diff/   # 部分存在差分
-    ├── resource_existence_diff/  # リソース存在差分
-    ├── single_spec_file/         # 単一仕様書ファイル
-    └── undeclared_diff/          # 未宣言差分
+    ├── comment_parsing/          # コメント解析
+    ├── demo_diff/               # デモ差分
+    ├── demo_existence/          # デモ存在差分
+    ├── env_patterns/            # 環境パターン
+    ├── invalid_spec/            # 無効な仕様書
+    ├── list_diff/               # リスト差分
+    ├── multiple_attribute_diff/ # 複数属性差分
+    ├── multiple_spec_files/     # 複数仕様書ファイル
+    ├── nested_block_diff/       # ネストブロック差分
+    ├── partial_existence_diff/  # 部分存在差分
+    ├── resource_existence_diff/ # リソース存在差分
+    ├── single_spec_file/        # 単一仕様書ファイル
+    └── undeclared_diff/         # 未宣言差分
 ```
 
 # テストケース例
@@ -76,6 +85,24 @@ aws_instance.web.instance_type
 aws_instance.web.tags.Environment
 ```
 
+## comment_parsing の例
+コメント付き.tfspecignoreファイルの解析をテストするケース。
+```
+# 複数行コメントのテスト
+# これは2行目のコメント
+# これは3行目のコメント
+aws_instance.web.instance_type
+
+# 単一行コメント
+aws_instance.web.tags.Environment
+
+aws_instance.db.instance_type  # 行末コメント
+aws_instance.cache.instance_type # これも行末コメント
+
+# インデックス1は2番目のingressブロック
+aws_security_group.web.ingress[1]
+```
+
 ## リソース存在差分の例
 ```
 # 本番環境でのSLA保証のための必須監視（他環境では不要）
@@ -84,8 +111,8 @@ aws_cloudwatch_metric_alarm.high_cpu
 
 ## ブロック存在差分の例
 ```
-# SSL/TLS通信要件による意図的差分（開発環境はHTTPのみ）
-aws_security_group.web.ingress[443]
+# SSL/TLS通信要件による意図的差分（開発環境はHTTPのみ、インデックス1は2番目のingressブロック）
+aws_security_group.web.ingress[1]
 ```
 
 ## カテゴリ別分割の例
@@ -103,8 +130,8 @@ test/multiple_categories/
 
 security.txt:
 ```
-# SSL/TLS設定の環境別要件
-aws_security_group.web.ingress[443]
+# SSL/TLS設定の環境別要件（インデックス1は2番目のingressブロック）
+aws_security_group.web.ingress[1]
 aws_load_balancer.web.ssl_policy
 ```
 
@@ -114,6 +141,40 @@ performance.txt:
 aws_instance.web.instance_type
 aws_rds_instance.main.db_instance_class
 ```
+
+# アーキテクチャ詳細
+
+## 主要コンポーネント
+
+### cmd.go
+- コマンドライン引数の処理
+- checkコマンドの実装
+- 各処理ステップの調整
+- エラーハンドリング
+
+### differ.go
+- 環境間の差分検出ロジック
+- IgnoreMatcherを使用した無視ルール適用
+- リソース存在差分、属性差分、ブロック差分の検出
+
+### parser.go
+- HCLファイルの解析
+- .tfspecignoreファイルの読み込み
+- 単一ファイル・分割ファイル両方に対応
+
+### types.go
+- データ構造の定義
+- EnvResource, EnvBlock, DiffResult等
+
+### reporter.go
+- Markdownテーブル形式でのレポート生成
+- 差分結果の整理・ソート
+- 値の補完処理
+
+### ignore_matcher.go
+- 無視ルールのマッチング判定
+- 階層的パスマッチング
+- インデックスベースの判定
 
 # 開発関連コマンド
 このプロジェクトはGoモジュールです（Go 1.25.1）

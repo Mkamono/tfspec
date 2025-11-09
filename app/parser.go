@@ -126,27 +126,18 @@ func (p *HCLParser) parseResourceContent(body hcl.Body, evalCtx *hcl.EvalContext
 	return nil
 }
 
-// .tfspecignoreファイルの読み込み
+// LoadIgnoreRules は.tfspecignoreファイルの読み込みを行う
 func LoadIgnoreRules(tfspecDir string) ([]string, error) {
 	var rules []string
 
 	// 単一ファイル形式をチェック
-	ignoreFile := tfspecDir + "/.tfspecignore"
-	if content, err := os.ReadFile(ignoreFile); err == nil {
-		rules = append(rules, parseIgnoreContent(string(content))...)
+	if fileRules, err := loadSingleIgnoreFile(tfspecDir + "/.tfspecignore"); err == nil {
+		rules = append(rules, fileRules...)
 	}
 
 	// ディレクトリ形式をチェック
-	ignoreDir := tfspecDir + "/.tfspecignore/"
-	if entries, err := os.ReadDir(ignoreDir); err == nil {
-		for _, entry := range entries {
-			if !entry.IsDir() && entry.Name()[len(entry.Name())-4:] == ".txt" {
-				filepath := ignoreDir + entry.Name()
-				if content, err := os.ReadFile(filepath); err == nil {
-					rules = append(rules, parseIgnoreContent(string(content))...)
-				}
-			}
-		}
+	if dirRules, err := loadIgnoreDirectory(tfspecDir + "/.tfspecignore/"); err == nil {
+		rules = append(rules, dirRules...)
 	}
 
 	return rules, nil
@@ -199,7 +190,7 @@ func parseIgnoreContentWithComments(content string, ruleComments map[string]stri
 			if currentComment == "" {
 				currentComment = comment
 			} else {
-				currentComment += " " + comment
+				currentComment += "<br>" + comment
 			}
 			continue
 		}
@@ -258,4 +249,33 @@ func parseIgnoreContent(content string) []string {
 	}
 
 	return rules
+}
+
+// loadSingleIgnoreFile は単一の.tfspecignoreファイルを読み込む
+func loadSingleIgnoreFile(filepath string) ([]string, error) {
+	content, err := os.ReadFile(filepath)
+	if err != nil {
+		return nil, err
+	}
+	return parseIgnoreContent(string(content)), nil
+}
+
+// loadIgnoreDirectory は.tfspecignoreディレクトリ内の.txtファイルを読み込む
+func loadIgnoreDirectory(dirPath string) ([]string, error) {
+	var rules []string
+	entries, err := os.ReadDir(dirPath)
+	if err != nil {
+		return nil, err
+	}
+
+	for _, entry := range entries {
+		if !entry.IsDir() && strings.HasSuffix(entry.Name(), ".txt") {
+			filepath := dirPath + entry.Name()
+			if content, err := os.ReadFile(filepath); err == nil {
+				rules = append(rules, parseIgnoreContent(string(content))...)
+			}
+		}
+	}
+
+	return rules, nil
 }

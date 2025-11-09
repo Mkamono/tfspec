@@ -1,8 +1,8 @@
-# SSL/TLS通信要件による意図的差分（開発環境はHTTPのみ）
-aws_security_group.web.ingress[443]
+# SSL/TLS通信要件による意図的差分（開発環境はHTTPのみ、インデックス1は2番目のingressブロック）
+aws_security_group.web.ingress[1]
 
-# 本番環境での管理インターフェースアクセス（他環境では不要）
-aws_security_group.web.ingress[8080]
+# 本番環境での管理インターフェースアクセス（他環境では不要、インデックス2は3番目のingressブロック）
+aws_security_group.web.ingress[2]
 
 # 環境識別タグの意図的差分
 aws_security_group.web.tags.Environment

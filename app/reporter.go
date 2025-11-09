@@ -1,0 +1,216 @@
+package app
+
+import (
+	"sort"
+	"strings"
+
+	"github.com/zclconf/go-cty/cty"
+)
+
+// ResultReporter はテーブル形式の結果出力を担当する
+type ResultReporter struct{}
+
+func NewResultReporter() *ResultReporter {
+	return &ResultReporter{}
+}
+
+// GenerateMarkdown は差分結果をMarkdownテーブル形式で出力する
+func (r *ResultReporter) GenerateMarkdown(diffs []*DiffResult, envNames []string, ruleComments map[string]string, envResources map[string]*EnvResources, app *TfspecApp) string {
+	driftTable, ignoredTable := r.buildTables(diffs, envNames, ruleComments, envResources, app)
+	return r.generateMarkdownTables(driftTable, ignoredTable, envNames)
+}
+
+// buildTables は差分データをテーブル形式に変換する
+func (r *ResultReporter) buildTables(diffs []*DiffResult, envNames []string, ruleComments map[string]string, envResources map[string]*EnvResources, app *TfspecApp) ([]TableRow, []TableRow) {
+	driftRows := make(map[string]*TableRow)
+	ignoredRows := make(map[string]*TableRow)
+
+	for _, diff := range diffs {
+		fullPath := diff.Resource + "." + diff.Path
+		key := fullPath
+
+		var targetMap map[string]*TableRow
+		if diff.IsIgnored {
+			targetMap = ignoredRows
+		} else {
+			targetMap = driftRows
+		}
+
+		row, exists := targetMap[key]
+		if !exists {
+			row = &TableRow{
+				Resource: diff.Resource,
+				Path:     diff.Path,
+				Values:   make(map[string]string),
+				Comment:  "",
+			}
+			targetMap[key] = row
+
+			if diff.IsIgnored {
+				for rule, comment := range ruleComments {
+					if strings.Contains(rule, diff.Resource) && strings.Contains(rule, diff.Path) {
+						row.Comment = comment
+						break
+					}
+				}
+			}
+		}
+
+		row.Values[diff.Environment] = app.formatValue(diff.Actual)
+
+		if !diff.Expected.IsNull() {
+			baseEnv := envNames[0]
+			if _, exists := row.Values[baseEnv]; !exists {
+				row.Values[baseEnv] = app.formatValue(diff.Expected)
+			}
+		}
+	}
+
+	r.fillMissingValues(driftRows, envNames, envResources, app)
+	r.fillMissingValues(ignoredRows, envNames, envResources, app)
+
+	var driftTable, ignoredTable []TableRow
+	for _, row := range driftRows {
+		driftTable = append(driftTable, *row)
+	}
+	for _, row := range ignoredRows {
+		ignoredTable = append(ignoredTable, *row)
+	}
+
+	sort.Slice(driftTable, func(i, j int) bool {
+		return driftTable[i].Resource+"."+driftTable[i].Path < driftTable[j].Resource+"."+driftTable[j].Path
+	})
+	sort.Slice(ignoredTable, func(i, j int) bool {
+		return ignoredTable[i].Resource+"."+ignoredTable[i].Path < ignoredTable[j].Resource+"."+ignoredTable[j].Path
+	})
+
+	return driftTable, ignoredTable
+}
+
+// fillMissingValues は欠損している環境の値を補填する
+func (r *ResultReporter) fillMissingValues(rows map[string]*TableRow, envNames []string, envResources map[string]*EnvResources, app *TfspecApp) {
+	for _, row := range rows {
+		for _, envName := range envNames {
+			if _, exists := row.Values[envName]; exists {
+				continue
+			}
+
+			if envResource, exists := envResources[envName]; exists {
+				resource := r.findResource(envResource, row.Resource)
+				if resource != nil {
+					value := r.getResourceValue(resource, row.Path)
+					if !value.IsNull() {
+						row.Values[envName] = app.formatValue(value)
+					} else {
+						row.Values[envName] = ""
+					}
+				} else {
+					row.Values[envName] = ""
+				}
+			}
+		}
+	}
+}
+
+// findResource はリソースを名前で検索する
+func (r *ResultReporter) findResource(envResources *EnvResources, resourceName string) *EnvResource {
+	for _, resource := range envResources.Resources {
+		fullName := resource.Type + "." + resource.Name
+		if fullName == resourceName {
+			return resource
+		}
+	}
+	return nil
+}
+
+// getResourceValue はリソースから指定パスの値を取得する
+func (r *ResultReporter) getResourceValue(resource *EnvResource, path string) cty.Value {
+	if path == "" {
+		return cty.NullVal(cty.String)
+	}
+
+	if value, exists := resource.Attrs[path]; exists {
+		return value
+	}
+
+	return cty.NullVal(cty.String)
+}
+
+// generateMarkdownTables はMarkdownテーブルを生成する
+func (r *ResultReporter) generateMarkdownTables(driftTable, ignoredTable []TableRow, envNames []string) string {
+	var md strings.Builder
+
+	md.WriteString("# Tfspec Check Results\n\n")
+
+	// 意図されていない差分テーブル
+	if len(driftTable) > 0 {
+		md.WriteString("## 🚨 意図されていない差分\n\n")
+		r.writeTableHeader(&md, envNames, false)
+		for _, row := range driftTable {
+			r.writeTableRow(&md, row, envNames, false)
+		}
+		md.WriteString("\n")
+	} else {
+		md.WriteString("## ✅ 意図されていない差分\n\n")
+		md.WriteString("意図されていない差分は検出されませんでした。\n\n")
+	}
+
+	// 無視された差分テーブル
+	if len(ignoredTable) > 0 {
+		md.WriteString("## 📝 無視された差分（意図的）\n\n")
+		r.writeTableHeader(&md, envNames, true)
+		for _, row := range ignoredTable {
+			r.writeTableRow(&md, row, envNames, true)
+		}
+		md.WriteString("\n")
+	}
+
+	return md.String()
+}
+
+// writeTableHeader はテーブルヘッダーを書き込む
+func (r *ResultReporter) writeTableHeader(md *strings.Builder, envNames []string, includeComment bool) {
+	md.WriteString("| 該当箇所 |")
+	for _, env := range envNames {
+		md.WriteString(" " + env + " |")
+	}
+	if includeComment {
+		md.WriteString(" 理由 |")
+	}
+	md.WriteString("\n")
+
+	md.WriteString("|----------|")
+	for range envNames {
+		md.WriteString("-------|")
+	}
+	if includeComment {
+		md.WriteString("------|")
+	}
+	md.WriteString("\n")
+}
+
+// writeTableRow はテーブル行を書き込む
+func (r *ResultReporter) writeTableRow(md *strings.Builder, row TableRow, envNames []string, includeComment bool) {
+	fullPath := row.Resource
+	if row.Path != "" {
+		fullPath += "." + row.Path
+	}
+	md.WriteString("| " + fullPath + " |")
+
+	for _, env := range envNames {
+		value := row.Values[env]
+		if value == "" {
+			value = "-"
+		}
+		md.WriteString(" " + value + " |")
+	}
+
+	if includeComment {
+		comment := row.Comment
+		if comment == "" {
+			comment = "-"
+		}
+		md.WriteString(" " + comment + " |")
+	}
+	md.WriteString("\n")
+}

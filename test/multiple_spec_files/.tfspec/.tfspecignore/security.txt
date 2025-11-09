@@ -1,6 +1,3 @@
-# SSL/TLS通信要件による意図的差分
-aws_security_group.web.ingress[443]
+# SSL/TLS通信要件による意図的差分（インデックス1は2番目のingressブロック）
+aws_security_group.web.ingress[1]
 aws_load_balancer.web.ssl_policy
-
-# SSH接続ネットワーク制限の環境別要件
-aws_security_group.web.ingress[22].cidr_blocks

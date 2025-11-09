@@ -3,19 +3,18 @@ package app
 import (
 	"fmt"
 	"sort"
-	"strconv"
 	"strings"
 
 	"github.com/zclconf/go-cty/cty"
 )
 
 type HCLDiffer struct {
-	ignoreRules []string
+	ignoreMatcher *IgnoreMatcher
 }
 
 func NewHCLDiffer(ignoreRules []string) *HCLDiffer {
 	return &HCLDiffer{
-		ignoreRules: ignoreRules,
+		ignoreMatcher: NewIgnoreMatcher(ignoreRules),
 	}
 }
 
@@ -106,7 +105,7 @@ func (d *HCLDiffer) compareResourceExistence(baseResources, envResources *EnvRes
 				Path:        "",  // リソース全体の存在差分なのでパスは空
 				Expected:    cty.BoolVal(baseExists),
 				Actual:      cty.BoolVal(envExists),
-				IsIgnored:   d.isIgnored(resourceKey),
+				IsIgnored:   d.ignoreMatcher.IsIgnored(resourceKey),
 			}
 			results = append(results, diff)
 		}
@@ -156,7 +155,7 @@ func (d *HCLDiffer) compareAttributes(baseResource, resource *EnvResource, baseE
 					Path:        attrName,
 					Expected:    baseValue,
 					Actual:      value,
-					IsIgnored:   d.isIgnored(resourcePath),
+					IsIgnored:   d.ignoreMatcher.IsIgnored(resourcePath),
 				}
 				results = append(results, diff)
 			}
@@ -206,7 +205,7 @@ func (d *HCLDiffer) compareTagAttributes(baseResource, resource *EnvResource, ba
 				Path:        fmt.Sprintf("tags.%s", tagKey),
 				Expected:    baseValue,
 				Actual:      value,
-				IsIgnored:   d.isIgnored(resourcePath),
+				IsIgnored:   d.ignoreMatcher.IsIgnored(resourcePath),
 			}
 			results = append(results, diff)
 		}
@@ -258,8 +257,8 @@ func (d *HCLDiffer) compareBlocks(baseResource, resource *EnvResource, baseEnv, 
 					Environment: env,
 					Path:        fmt.Sprintf("%s[%d]", blockType, i),
 					Expected:    cty.NullVal(cty.DynamicPseudoType),
-					Actual:      cty.StringVal("block_exists"),
-					IsIgnored:   d.isIgnoredWithBlock(resourcePath, block, blockType),
+					Actual:      d.formatBlockContent(block),
+					IsIgnored:   d.ignoreMatcher.IsIgnoredWithBlock(resourcePath, block, blockType),
 				}
 				results = append(results, diff)
 			} else if baseBlock != nil && block == nil {
@@ -269,9 +268,9 @@ func (d *HCLDiffer) compareBlocks(baseResource, resource *EnvResource, baseEnv, 
 					Resource:    fmt.Sprintf("%s.%s", baseResource.Type, baseResource.Name),
 					Environment: env,
 					Path:        fmt.Sprintf("%s[%d]", blockType, i),
-					Expected:    cty.StringVal("block_exists"),
+					Expected:    d.formatBlockContent(baseBlock),
 					Actual:      cty.NullVal(cty.DynamicPseudoType),
-					IsIgnored:   d.isIgnoredWithBlock(resourcePath, baseBlock, blockType),
+					IsIgnored:   d.ignoreMatcher.IsIgnoredWithBlock(resourcePath, baseBlock, blockType),
 				}
 				results = append(results, diff)
 			} else if baseBlock != nil && block != nil {
@@ -318,7 +317,7 @@ func (d *HCLDiffer) compareBlockAttributes(resource *EnvResource, baseBlock, blo
 				Path:        fmt.Sprintf("%s[%d].%s", blockType, index, attrName),
 				Expected:    baseValue,
 				Actual:      value,
-				IsIgnored:   d.isIgnoredWithBlockAttribute(resourcePath, block, blockType),
+				IsIgnored:   d.ignoreMatcher.IsIgnoredWithBlockAttribute(resourcePath, block, blockType),
 			}
 			results = append(results, diff)
 		}
@@ -327,135 +326,57 @@ func (d *HCLDiffer) compareBlockAttributes(resource *EnvResource, baseBlock, blo
 	return results
 }
 
-// リソース・属性パスが.tfspecignoreルールにマッチするかチェック
-func (d *HCLDiffer) isIgnored(resourcePath string) bool {
-	for _, rule := range d.ignoreRules {
-		if rule == resourcePath {
-			return true
-		}
-		// 階層的マッチング: 親パスが無視される場合、子パスも無視
-		if d.isChildPath(resourcePath, rule) {
-			return true
-		}
-		// aws_security_group.web.ingress[443] 形式への対応
-		if d.matchesPortRule(rule, resourcePath) {
-			return true
-		}
-		// より柔軟なパターンマッチング
-		if d.matchesPattern(rule, resourcePath) {
-			return true
-		}
-	}
-	return false
-}
-
-// 指定されたパスが親ルールの子パスかどうかをチェック
-func (d *HCLDiffer) isChildPath(resourcePath, parentRule string) bool {
-	// resourcePath が parentRule の子パスかどうか
-	// 例: resourcePath="aws_security_group.web.ingress[443].from_port", parentRule="aws_security_group.web.ingress[443]"
-	if strings.HasPrefix(resourcePath, parentRule+".") {
-		return true
-	}
-	return false
-}
-
-// ポート番号指定ルールとのマッチング
-func (d *HCLDiffer) matchesPortRule(rule, resourcePath string) bool {
-	// パターン1: aws_security_group.web.ingress[443] 形式
-	// これはポート443のingressブロック全体を無視する
-
-	// パターン2: aws_security_group.web.ingress[22].cidr_blocks 形式
-	// これはポート22のingressブロックのcidr_blocks属性を無視する
-
-	// TODO: 将来の実装では実際のポート番号でマッチングする
-	// 現在は属性ベースマッチングで対応
-	return false
-}
-
-// ブロック情報を考慮した無視判定
-func (d *HCLDiffer) isIgnoredWithBlock(resourcePath string, block *EnvBlock, blockType string) bool {
-	// まず通常の無視判定を試行
-	if d.isIgnored(resourcePath) {
-		return true
+// formatBlockContent はブロックの内容を文字列としてフォーマットする
+func (d *HCLDiffer) formatBlockContent(block *EnvBlock) cty.Value {
+	if block == nil {
+		return cty.NullVal(cty.String)
 	}
 
-	// ポート番号ベースの無視判定（ingress/egressブロック用）
-	if blockType == "ingress" || blockType == "egress" {
-		if fromPort, exists := block.Attrs["from_port"]; exists && !fromPort.IsNull() {
-			if fromPort.Type() == cty.Number {
-				portNum := fromPort.AsBigFloat()
-				if portNum.IsInt() {
-					if port, accuracy := portNum.Int64(); accuracy == 0 {
-						// ポート番号ベースのルールをチェック
-						portBasedPath := strings.Replace(resourcePath, fmt.Sprintf("[%d]",
-							extractIndexFromPath(resourcePath)), fmt.Sprintf("[%d]", port), 1)
-						if d.isIgnored(portBasedPath) {
-							return true
-						}
-					}
+	// ブロックの属性を文字列形式で表現（ソート済み順序で）
+	var attrNames []string
+	for name := range block.Attrs {
+		attrNames = append(attrNames, name)
+	}
+	sort.Strings(attrNames)
+
+	var attrs []string
+	for _, name := range attrNames {
+		value := block.Attrs[name]
+		if value.Type() == cty.String {
+			attrs = append(attrs, fmt.Sprintf("%s: \"%s\"", name, value.AsString()))
+		} else if value.Type() == cty.Number {
+			attrs = append(attrs, fmt.Sprintf("%s: %s", name, value.AsBigFloat().String()))
+		} else if value.Type() == cty.Bool {
+			boolVal := "false"
+			if value.True() {
+				boolVal = "true"
+			}
+			attrs = append(attrs, fmt.Sprintf("%s: %s", name, boolVal))
+		} else if value.Type().IsListType() || value.Type().IsTupleType() {
+			// リストやタプルの場合
+			var elements []string
+			for it := value.ElementIterator(); it.Next(); {
+				_, val := it.Element()
+				if val.Type() == cty.String {
+					elements = append(elements, fmt.Sprintf("\"%s\"", val.AsString()))
+				} else {
+					elements = append(elements, fmt.Sprintf("%v", val))
 				}
 			}
+			attrs = append(attrs, fmt.Sprintf("%s: [%s]", name, fmt.Sprintf("%s", elements)))
+		} else {
+			attrs = append(attrs, fmt.Sprintf("%s: %v", name, value))
 		}
 	}
 
-	return false
-}
-
-// パスからインデックスを抽出
-func extractIndexFromPath(resourcePath string) int {
-	// aws_security_group.web.ingress[1] から 1 を抽出
-	start := strings.LastIndex(resourcePath, "[")
-	end := strings.LastIndex(resourcePath, "]")
-	if start != -1 && end != -1 && end > start {
-		indexStr := resourcePath[start+1 : end]
-		if idx := parseIntSafe(indexStr); idx >= 0 {
-			return idx
-		}
+	// 属性をHTMLの<br>タグで改行して表示
+	if len(attrs) == 0 {
+		return cty.StringVal("{}")
 	}
-	return -1
-}
-
-// 安全な整数パース
-func parseIntSafe(s string) int {
-	if val, err := strconv.Atoi(s); err == nil {
-		return val
-	}
-	return -1
-}
-
-// ブロック属性の無視判定（ポート番号ベース対応）
-func (d *HCLDiffer) isIgnoredWithBlockAttribute(resourcePath string, block *EnvBlock, blockType string) bool {
-	// まず通常の無視判定を試行
-	if d.isIgnored(resourcePath) {
-		return true
+	if len(attrs) == 1 {
+		return cty.StringVal(fmt.Sprintf("{ %s }", attrs[0]))
 	}
 
-	// ポート番号ベースの無視判定（ingress/egressブロック用）
-	if blockType == "ingress" || blockType == "egress" {
-		if fromPort, exists := block.Attrs["from_port"]; exists && !fromPort.IsNull() {
-			if fromPort.Type() == cty.Number {
-				portNum := fromPort.AsBigFloat()
-				if portNum.IsInt() {
-					if port, accuracy := portNum.Int64(); accuracy == 0 {
-						// ポート番号ベースのルールをチェック
-						// aws_security_group.web.ingress[1].cidr_blocks → aws_security_group.web.ingress[22].cidr_blocks
-						portBasedPath := strings.Replace(resourcePath, fmt.Sprintf("[%d]",
-							extractIndexFromPath(resourcePath)), fmt.Sprintf("[%d]", port), 1)
-						if d.isIgnored(portBasedPath) {
-							return true
-						}
-					}
-				}
-			}
-		}
-	}
-
-	return false
+	return cty.StringVal(fmt.Sprintf("{ %s }", strings.Join(attrs, ",<br>&nbsp;&nbsp;")))
 }
 
-// より柔軟なパターンマッチング
-func (d *HCLDiffer) matchesPattern(rule, resourcePath string) bool {
-	// ワイルドカード的なマッチング
-	// 例: "aws_security_group.web.ingress[*].cidr_blocks" のような将来の拡張
-	return false
-}
