@@ -1,72 +1,42 @@
-# Claude Code Spec-Driven Development
+# CLAUDE.md
 
-Kiro-style Spec Driven Development implementation using claude code slash commands, hooks and agents.
+This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
 
-## Project Context
+会話、ドキュメント記述は日本語で行うこと
 
-### Paths
-- Steering: `.kiro/steering/`
-- Specs: `.kiro/specs/`
-- Commands: `.claude/commands/`
+# プロダクト概要
+tfspecは、Terraformの環境間構成差分を仕様書として宣言的に管理し、構成ドリフトを自動検出するツールです。
 
-### Steering vs Specification
+# プロジェクト構造
+- `.tfspec/`ディレクトリにすべての設定が集約される
+- 仕様書は`.tfspec/spec.hcl`（単一ファイル）または`.tfspec/specs/`（分割ファイル）で管理
+- Terraformの構文を再利用して、`# tfspec(...)`構造化コメントで差分の仕様を宣言
 
-**Steering** (`.kiro/steering/`) - Guide AI with project-wide rules and context
-**Specs** (`.kiro/specs/`) - Formalize development process for individual features
+## 仕様書の記法
+- **簡潔な記法**: 仕様書には差分のある属性・ブロック・リソースのみを記述
+- **共通部分の省略**: 全環境で共通の値（ami、name、descriptionなど）は仕様書から省略可能
+- **差分のみ焦点**: `# tfspec(...)`コメントが付いた行のみがツールの検証対象
+- **存在差分の空ブロック**: 特定環境にのみ存在するブロックは `{}` で表現し、パラメータ記載不要
 
-### Active Specifications
-- Check `.kiro/specs/` for active specifications
-- Use `/kiro:spec-status [feature-name]` to check progress
+# アーキテクチャ
+## HCLパッケージの使用
+tfspecは[HashiCorp Configuration Language (HCL)](https://github.com/hashicorp/hcl)のパッケージを使用してTerraformの構文解析と処理を行います。
 
-## Development Guidelines
-- Think in English, generate responses in English
+### 主要なHCLパッケージ
+- `hclsyntax` - HCLネイティブ構文の解析と評価
+- `hclparse` - ファイルベースの解析とキャッシュ
+- `hcldec` - 仕様ベースのデコード
+- `gohcl` - Go構造体ベースのデコード
+- `hclwrite` - プログラマティックなHCL生成
 
-## Workflow
+### HCL情報モデル
+- **属性 (Attributes)**: `key = value` 形式
+- **ブロック (Blocks)**: 構造化された設定セクション
+- **式評価 (Expression)**: 動的設定値の計算
+- go-ctyライブラリとの統合による型安全性
 
-### Phase 0: Steering (Optional)
-`/kiro:steering` - Create/update steering documents
-`/kiro:steering-custom` - Create custom steering for specialized contexts
-
-Note: Optional for new features or small additions. You can proceed directly to spec-init.
-
-### Phase 1: Specification Creation
-1. `/kiro:spec-init [detailed description]` - Initialize spec with detailed project description
-2. `/kiro:spec-requirements [feature]` - Generate requirements document
-3. `/kiro:spec-design [feature]` - Interactive: "Have you reviewed requirements.md? [y/N]"
-4. `/kiro:spec-tasks [feature]` - Interactive: Confirms both requirements and design review
-
-### Phase 2: Progress Tracking
-`/kiro:spec-status [feature]` - Check current progress and phases
-
-## Development Rules
-1. **Consider steering**: Run `/kiro:steering` before major development (optional for new features)
-2. **Follow 3-phase approval workflow**: Requirements → Design → Tasks → Implementation
-3. **Approval required**: Each phase requires human review (interactive prompt or manual)
-4. **No skipping phases**: Design requires approved requirements; Tasks require approved design
-5. **Update task status**: Mark tasks as completed when working on them
-6. **Keep steering current**: Run `/kiro:steering` after significant changes
-7. **Check spec compliance**: Use `/kiro:spec-status` to verify alignment
-
-## Steering Configuration
-
-### Current Steering Files
-Managed by `/kiro:steering` command. Updates here reflect command changes.
-
-### Active Steering Files
-- `product.md`: Always included - Product context and business objectives
-- `tech.md`: Always included - Technology stack and architectural decisions
-- `structure.md`: Always included - File organization and code patterns
-
-### Custom Steering Files
-<!-- Added by /kiro:steering-custom command -->
-<!-- Format:
-- `filename.md`: Mode - Pattern(s) - Description
-  Mode: Always|Conditional|Manual
-  Pattern: File patterns for Conditional mode
--->
-
-### Inclusion Modes
-- **Always**: Loaded in every interaction (default)
-- **Conditional**: Loaded for specific file patterns (e.g., "*.test.js")
-- **Manual**: Reference with `@filename.md` syntax
-
+# 開発関連コマンド
+このプロジェクトはGoモジュールです（Go 1.25.1）
+- `go build` - ビルド
+- `go test` - テスト実行
+- `go mod tidy` - 依存関係の整理
