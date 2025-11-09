@@ -377,6 +377,6 @@ func (d *HCLDiffer) formatBlockContent(block *EnvBlock) cty.Value {
 		return cty.StringVal(fmt.Sprintf("{ %s }", attrs[0]))
 	}
 
-	return cty.StringVal(fmt.Sprintf("{ %s }", strings.Join(attrs, ",<br>&nbsp;&nbsp;")))
+	return cty.StringVal(fmt.Sprintf("{<br>&nbsp;&nbsp;%s<br>}", strings.Join(attrs, ",<br>&nbsp;&nbsp;")))
 }
 
