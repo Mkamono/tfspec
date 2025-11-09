@@ -1,0 +1,2 @@
+# Environment tag differences
+aws_instance.web.tags.Environment

@@ -1,0 +1,2 @@
+# Invalid specification test case
+aws_instance.web.invalid_attribute

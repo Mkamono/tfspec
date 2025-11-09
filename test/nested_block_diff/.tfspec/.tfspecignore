@@ -1,0 +1,8 @@
+# HTTPS通信用ブロックの追加（本番環境env2/env3のみ）
+aws_security_group.web.ingress[1]
+
+# 3番目のingress ブロック存在差分（本番環境でのSSH設定の再配置）
+aws_security_group.web.ingress[2]
+
+# 環境識別タグの意図的差分
+aws_security_group.web.tags.Environment

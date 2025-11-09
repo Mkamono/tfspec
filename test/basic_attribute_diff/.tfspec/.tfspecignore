@@ -1,0 +1,5 @@
+# 本番環境のパフォーマンス要件による意図的差分
+aws_instance.web.instance_type
+
+# 環境識別タグの意図的差分
+aws_instance.web.tags.Environment

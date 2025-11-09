@@ -1,13 +1,3 @@
-resource "aws_instance" "web" {
-  instance_type = "t3.small"
-  ami           = "ami-0abcdef1234567890"
-
-  tags = {
-    Name = "web-server"
-    Environment = "env3"
-  }
-}
-
 resource "aws_cloudwatch_metric_alarm" "high_cpu" {
   alarm_name          = "high-cpu-usage"
   comparison_operator = "GreaterThanThreshold"
@@ -18,8 +8,4 @@ resource "aws_cloudwatch_metric_alarm" "high_cpu" {
   statistic           = "Average"
   threshold           = "85"
   alarm_description   = "This metric monitors ec2 cpu utilization"
-
-  dimensions = {
-    InstanceId = "i-1234567890abcdef0"
-  }
 }

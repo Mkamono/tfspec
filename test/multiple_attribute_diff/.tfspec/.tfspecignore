@@ -1,0 +1,11 @@
+# 環境別パフォーマンス要件による意図的差分
+aws_instance.web.instance_type
+
+# 環境別ストレージ容量要件による意図的差分
+aws_instance.web.root_block_device.volume_size
+
+# 環境識別タグの意図的差分
+aws_instance.web.tags.Environment
+
+# バックアップポリシーの環境別要件
+aws_instance.web.tags.Backup

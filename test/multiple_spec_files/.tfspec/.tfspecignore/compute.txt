@@ -1,0 +1,7 @@
+# 環境別パフォーマンス要件
+aws_instance.web.instance_type
+aws_instance.app.instance_type
+
+# 環境識別タグ
+aws_instance.web.tags.Environment
+aws_instance.app.tags.Environment

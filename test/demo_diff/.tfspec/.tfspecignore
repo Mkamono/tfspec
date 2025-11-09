@@ -1,0 +1,2 @@
+# Demo configuration differences
+aws_instance.demo.instance_type
