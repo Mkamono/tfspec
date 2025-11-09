@@ -35,6 +35,56 @@ tfspecは[HashiCorp Configuration Language (HCL)](https://github.com/hashicorp/h
 - **式評価 (Expression)**: 動的設定値の計算
 - go-ctyライブラリとの統合による型安全性
 
+# ディレクトリ構造
+```
+tfspec/
+├── main.go          # エントリーポイント（現在は空の実装）
+├── go.mod           # Goモジュール定義（Go 1.25.1）
+├── app/             # アプリケーションコード（将来の実装場所）
+├── docs/            # HCLライブラリの技術文書
+│   └── hcl_deepwiki.md  # HCLライブラリの詳細仕様
+└── test/            # テストケース群
+    ├── basic_attribute_diff/      # 基本的な属性差分
+    ├── env_patterns/             # 環境パターン
+    ├── invalid_spec/             # 無効な仕様書
+    ├── list_diff/                # リスト差分
+    ├── multiple_attribute_diff/  # 複数属性差分
+    ├── multiple_spec_files/      # 複数仕様書ファイル
+    ├── nested_block_diff/        # ネストブロック差分
+    ├── partial_existence_diff/   # 部分存在差分
+    ├── resource_existence_diff/  # リソース存在差分
+    ├── single_spec_file/         # 単一仕様書ファイル
+    └── undeclared_diff/          # 未宣言差分
+```
+
+# テストケース例
+
+## basic_attribute_diff の例
+```
+test/basic_attribute_diff/
+├── .tfspec/
+│   └── spec.hcl     # 仕様書: instance_type差分を宣言
+├── env1/
+│   └── main.hcl     # t3.small を使用
+├── env2/
+│   └── main.hcl     # t3.small を使用
+└── env3/
+    └── main.hcl     # t3.large を使用（本番環境）
+```
+
+仕様書（.tfspec/spec.hcl）:
+```hcl
+resource "aws_instance" "web" {
+  instance_type = "t3.large" # tfspec(env="env3", reason="本番環境のパフォーマンス要件")
+
+  tags = {
+    Environment = "env3" # tfspec(env="env3", reason="環境識別用タグ")
+    Environment = "env2" # tfspec(env="env2", reason="環境識別用タグ")
+    Environment = "env1" # tfspec(env="env1", reason="環境識別用タグ")
+  }
+}
+```
+
 # 開発関連コマンド
 このプロジェクトはGoモジュールです（Go 1.25.1）
 - `go build` - ビルド
