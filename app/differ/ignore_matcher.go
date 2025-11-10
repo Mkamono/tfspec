@@ -1,8 +1,10 @@
-package app
+package differ
 
 import (
 	"fmt"
 	"strings"
+
+	"github.com/Mkamono/tfspec/app/types"
 )
 
 // IgnoreMatcher は無視ルールの判定を担当する
@@ -37,12 +39,12 @@ func (m *IgnoreMatcher) IsIgnored(resourcePath string) bool {
 }
 
 // IsIgnoredWithBlock はブロック情報を考慮した無視判定を行う
-func (m *IgnoreMatcher) IsIgnoredWithBlock(resourcePath string, block *EnvBlock, blockType string) bool {
+func (m *IgnoreMatcher) IsIgnoredWithBlock(resourcePath string, block *types.EnvBlock, blockType string) bool {
 	return m.IsIgnored(resourcePath)
 }
 
 // IsIgnoredWithBlockAttribute はブロック属性の無視判定を行う
-func (m *IgnoreMatcher) IsIgnoredWithBlockAttribute(resourcePath string, block *EnvBlock, blockType string) bool {
+func (m *IgnoreMatcher) IsIgnoredWithBlockAttribute(resourcePath string, block *types.EnvBlock, blockType string) bool {
 	return m.IsIgnored(resourcePath)
 }
 
@@ -57,7 +59,7 @@ func (m *IgnoreMatcher) matchesPattern(rule, resourcePath string) bool {
 }
 
 // ValidateRules は与えられたリソースデータに対して無視ルールの検証を行う
-func (m *IgnoreMatcher) ValidateRules(envs map[string]map[string]*EnvResource) {
+func (m *IgnoreMatcher) ValidateRules(envs map[string]map[string]*types.EnvResource) {
 	for _, rule := range m.rules {
 		if m.isValidRule(rule, envs) {
 			m.validatedRules[rule] = true
@@ -73,7 +75,7 @@ func (m *IgnoreMatcher) GetWarnings() []string {
 }
 
 // isValidRule は無視ルールが実際のリソース構成に存在するかチェックする
-func (m *IgnoreMatcher) isValidRule(rule string, envs map[string]map[string]*EnvResource) bool {
+func (m *IgnoreMatcher) isValidRule(rule string, envs map[string]map[string]*types.EnvResource) bool {
 	parts := strings.Split(rule, ".")
 	if len(parts) < 2 {
 		return false
@@ -101,7 +103,7 @@ func (m *IgnoreMatcher) isValidRule(rule string, envs map[string]map[string]*Env
 }
 
 // hasAttribute は指定されたリソースに属性が存在するかチェックする
-func (m *IgnoreMatcher) hasAttribute(resource *EnvResource, attributePath string) bool {
+func (m *IgnoreMatcher) hasAttribute(resource *types.EnvResource, attributePath string) bool {
 	parts := strings.Split(attributePath, ".")
 
 	// 単純な属性チェック（ここでは基本的な属性のみチェック）

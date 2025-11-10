@@ -3,11 +3,11 @@ package main
 import (
 	"os"
 
-	"github.com/Mkamono/tfspec/app"
+	"github.com/Mkamono/tfspec/app/cmd"
 )
 
 func main() {
-	app := app.NewTfspecApp()
+	app := cmd.NewTfspecApp()
 	rootCmd := app.CreateRootCommand()
 
 	if err := rootCmd.Execute(); err != nil {

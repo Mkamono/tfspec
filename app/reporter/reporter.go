@@ -1,9 +1,11 @@
-package app
+package reporter
 
 import (
 	"sort"
 	"strings"
 
+	"github.com/Mkamono/tfspec/app/parser"
+	"github.com/Mkamono/tfspec/app/types"
 	"github.com/olekukonko/tablewriter"
 	"github.com/olekukonko/tablewriter/renderer"
 	"github.com/zclconf/go-cty/cty"
@@ -11,30 +13,30 @@ import (
 
 // ResultReporter はテーブル形式の結果出力を担当する
 type ResultReporter struct {
-	formatter *ValueFormatter
+	formatter *parser.ValueFormatter
 }
 
 func NewResultReporter() *ResultReporter {
 	return &ResultReporter{
-		formatter: NewValueFormatter(),
+		formatter: parser.NewValueFormatter(),
 	}
 }
 
 // GenerateMarkdown は差分結果をMarkdownテーブル形式で出力する
-func (r *ResultReporter) GenerateMarkdown(diffs []*DiffResult, envNames []string, ruleComments map[string]string, envResources map[string]*EnvResources) string {
+func (r *ResultReporter) GenerateMarkdown(diffs []*types.DiffResult, envNames []string, ruleComments map[string]string, envResources map[string]*types.EnvResources) string {
 	driftTable, ignoredTable := r.buildTables(diffs, envNames, ruleComments, envResources)
 	return r.generateMarkdownReport(driftTable, ignoredTable, envNames)
 }
 
 // buildTables は差分データをテーブル形式に変換する
-func (r *ResultReporter) buildTables(diffs []*DiffResult, envNames []string, ruleComments map[string]string, envResources map[string]*EnvResources) ([]TableRow, []TableRow) {
-	driftRows := make(map[string]*TableRow)
-	ignoredRows := make(map[string]*TableRow)
+func (r *ResultReporter) buildTables(diffs []*types.DiffResult, envNames []string, ruleComments map[string]string, envResources map[string]*types.EnvResources) ([]types.TableRow, []types.TableRow) {
+	driftRows := make(map[string]*types.TableRow)
+	ignoredRows := make(map[string]*types.TableRow)
 
 	// DiffResultをTableRowに変換
 	for _, diff := range diffs {
 		key := diff.Resource + "." + diff.Path
-		var targetMap map[string]*TableRow
+		var targetMap map[string]*types.TableRow
 		if diff.IsIgnored {
 			targetMap = ignoredRows
 		} else {
@@ -64,12 +66,12 @@ func (r *ResultReporter) buildTables(diffs []*DiffResult, envNames []string, rul
 }
 
 // getOrCreateRow は既存の行を取得するか新しい行を作成する
-func (r *ResultReporter) getOrCreateRow(targetMap map[string]*TableRow, key, resource, path string) *TableRow {
+func (r *ResultReporter) getOrCreateRow(targetMap map[string]*types.TableRow, key, resource, path string) *types.TableRow {
 	if row, exists := targetMap[key]; exists {
 		return row
 	}
 
-	row := &TableRow{
+	row := &types.TableRow{
 		Resource: resource,
 		Path:     path,
 		Values:   make(map[string]string),
@@ -80,7 +82,7 @@ func (r *ResultReporter) getOrCreateRow(targetMap map[string]*TableRow, key, res
 }
 
 // enrichWithComments は無視されたルールにコメントを付与する
-func (r *ResultReporter) enrichWithComments(rows map[string]*TableRow, ruleComments map[string]string) {
+func (r *ResultReporter) enrichWithComments(rows map[string]*types.TableRow, ruleComments map[string]string) {
 	for _, row := range rows {
 		for rule, comment := range ruleComments {
 			if strings.Contains(rule, row.Resource) && strings.Contains(rule, row.Path) {
@@ -92,7 +94,7 @@ func (r *ResultReporter) enrichWithComments(rows map[string]*TableRow, ruleComme
 }
 
 // fillMissingValues は欠損している環境の値を補填する
-func (r *ResultReporter) fillMissingValues(rows map[string]*TableRow, envNames []string, envResources map[string]*EnvResources) {
+func (r *ResultReporter) fillMissingValues(rows map[string]*types.TableRow, envNames []string, envResources map[string]*types.EnvResources) {
 	for _, row := range rows {
 		for _, envName := range envNames {
 			if _, exists := row.Values[envName]; exists {
@@ -117,7 +119,7 @@ func (r *ResultReporter) fillMissingValues(rows map[string]*TableRow, envNames [
 }
 
 // findResource はリソースを名前で検索する
-func (r *ResultReporter) findResource(envResources *EnvResources, resourceName string) *EnvResource {
+func (r *ResultReporter) findResource(envResources *types.EnvResources, resourceName string) *types.EnvResource {
 	for _, resource := range envResources.Resources {
 		fullName := resource.Type + "." + resource.Name
 		if fullName == resourceName {
@@ -128,7 +130,7 @@ func (r *ResultReporter) findResource(envResources *EnvResources, resourceName s
 }
 
 // getResourceValue はリソースから指定パスの値を取得する
-func (r *ResultReporter) getResourceValue(resource *EnvResource, path string) cty.Value {
+func (r *ResultReporter) getResourceValue(resource *types.EnvResource, path string) cty.Value {
 	if path == "" {
 		// リソース存在差分の場合
 		if resource != nil {
@@ -145,8 +147,8 @@ func (r *ResultReporter) getResourceValue(resource *EnvResource, path string) ct
 }
 
 // mapToSortedSlice はマップをソート済みスライスに変換する
-func (r *ResultReporter) mapToSortedSlice(rows map[string]*TableRow) []TableRow {
-	result := make([]TableRow, 0, len(rows))
+func (r *ResultReporter) mapToSortedSlice(rows map[string]*types.TableRow) []types.TableRow {
+	result := make([]types.TableRow, 0, len(rows))
 	for _, row := range rows {
 		result = append(result, *row)
 	}
@@ -161,7 +163,7 @@ func (r *ResultReporter) mapToSortedSlice(rows map[string]*TableRow) []TableRow 
 }
 
 // generateMarkdownReport はMarkdownレポート全体を生成する
-func (r *ResultReporter) generateMarkdownReport(driftTable, ignoredTable []TableRow, envNames []string) string {
+func (r *ResultReporter) generateMarkdownReport(driftTable, ignoredTable []types.TableRow, envNames []string) string {
 	var md strings.Builder
 
 	md.WriteString("# Tfspec Check Results\n\n")
@@ -187,7 +189,7 @@ func (r *ResultReporter) generateMarkdownReport(driftTable, ignoredTable []Table
 }
 
 // buildMarkdownTable はtablewriterを使用してMarkdownテーブルを生成する
-func (r *ResultReporter) buildMarkdownTable(rows []TableRow, envNames []string, includeComment bool) string {
+func (r *ResultReporter) buildMarkdownTable(rows []types.TableRow, envNames []string, includeComment bool) string {
 	var buffer strings.Builder
 	table := tablewriter.NewTable(&buffer,
 		tablewriter.WithRenderer(renderer.NewMarkdown()),

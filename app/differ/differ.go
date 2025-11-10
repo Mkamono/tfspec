@@ -1,10 +1,11 @@
-package app
+package differ
 
 import (
 	"fmt"
 	"sort"
 	"strings"
 
+	"github.com/Mkamono/tfspec/app/types"
 	"github.com/zclconf/go-cty/cty"
 )
 
@@ -19,13 +20,13 @@ func NewHCLDiffer(ignoreRules []string) *HCLDiffer {
 }
 
 // 環境間差分を検出し、.tfspecignoreルールでフィルタリング
-func (d *HCLDiffer) Compare(envResources map[string]*EnvResources) ([]*DiffResult, error) {
-	var results []*DiffResult
+func (d *HCLDiffer) Compare(envResources map[string]*types.EnvResources) ([]*types.DiffResult, error) {
+	var results []*types.DiffResult
 
 	// .tfspecignoreルールの検証を実行
-	envResourcesMap := make(map[string]map[string]*EnvResource)
+	envResourcesMap := make(map[string]map[string]*types.EnvResource)
 	for envName, envRes := range envResources {
-		envResourcesMap[envName] = make(map[string]*EnvResource)
+		envResourcesMap[envName] = make(map[string]*types.EnvResource)
 		for _, resource := range envRes.Resources {
 			key := fmt.Sprintf("%s.%s", resource.Type, resource.Name)
 			envResourcesMap[envName][key] = resource
@@ -82,18 +83,18 @@ func (d *HCLDiffer) GetIgnoreWarnings() []string {
 }
 
 // リソース存在差分を検出
-func (d *HCLDiffer) compareResourceExistence(baseResources, envResources *EnvResources, baseEnv, env string) []*DiffResult {
-	var results []*DiffResult
+func (d *HCLDiffer) compareResourceExistence(baseResources, envResources *types.EnvResources, baseEnv, env string) []*types.DiffResult {
+	var results []*types.DiffResult
 
 	// 基準環境のリソースをマップ化
-	baseResourceMap := make(map[string]*EnvResource)
+	baseResourceMap := make(map[string]*types.EnvResource)
 	for _, resource := range baseResources.Resources {
 		key := fmt.Sprintf("%s.%s", resource.Type, resource.Name)
 		baseResourceMap[key] = resource
 	}
 
 	// 比較環境のリソースをマップ化
-	envResourceMap := make(map[string]*EnvResource)
+	envResourceMap := make(map[string]*types.EnvResource)
 	for _, resource := range envResources.Resources {
 		key := fmt.Sprintf("%s.%s", resource.Type, resource.Name)
 		envResourceMap[key] = resource
@@ -115,7 +116,7 @@ func (d *HCLDiffer) compareResourceExistence(baseResources, envResources *EnvRes
 
 		if baseExists != envExists {
 			// リソース存在差分を記録
-			diff := &DiffResult{
+			diff := &types.DiffResult{
 				Resource:    resourceKey,
 				Environment: env,
 				Path:        "",  // リソース全体の存在差分なのでパスは空
@@ -131,8 +132,8 @@ func (d *HCLDiffer) compareResourceExistence(baseResources, envResources *EnvRes
 }
 
 // 2つのリソースの属性を比較
-func (d *HCLDiffer) compareAttributes(baseResource, resource *EnvResource, baseEnv, env string) []*DiffResult {
-	var results []*DiffResult
+func (d *HCLDiffer) compareAttributes(baseResource, resource *types.EnvResource, baseEnv, env string) []*types.DiffResult {
+	var results []*types.DiffResult
 
 	// 全ての属性名を収集
 	allAttrNames := make(map[string]bool)
@@ -165,7 +166,7 @@ func (d *HCLDiffer) compareAttributes(baseResource, resource *EnvResource, baseE
 				nestedDiffs := d.compareTagAttributes(baseResource, resource, baseValue, value, baseEnv, env)
 				results = append(results, nestedDiffs...)
 			} else {
-				diff := &DiffResult{
+				diff := &types.DiffResult{
 					Resource:    fmt.Sprintf("%s.%s", baseResource.Type, baseResource.Name),
 					Environment: env,
 					Path:        attrName,
@@ -182,8 +183,8 @@ func (d *HCLDiffer) compareAttributes(baseResource, resource *EnvResource, baseE
 }
 
 // tagsのネストした属性を比較
-func (d *HCLDiffer) compareTagAttributes(baseResource, resource *EnvResource, baseTags, tags cty.Value, baseEnv, env string) []*DiffResult {
-	var results []*DiffResult
+func (d *HCLDiffer) compareTagAttributes(baseResource, resource *types.EnvResource, baseTags, tags cty.Value, baseEnv, env string) []*types.DiffResult {
+	var results []*types.DiffResult
 
 	if !baseTags.Type().IsObjectType() || !tags.Type().IsObjectType() {
 		return results
@@ -215,7 +216,7 @@ func (d *HCLDiffer) compareTagAttributes(baseResource, resource *EnvResource, ba
 
 		if !baseValue.Equals(value).True() {
 			resourcePath := fmt.Sprintf("%s.%s.tags.%s", baseResource.Type, baseResource.Name, tagKey)
-			diff := &DiffResult{
+			diff := &types.DiffResult{
 				Resource:    fmt.Sprintf("%s.%s", baseResource.Type, baseResource.Name),
 				Environment: env,
 				Path:        fmt.Sprintf("tags.%s", tagKey),
@@ -231,8 +232,8 @@ func (d *HCLDiffer) compareTagAttributes(baseResource, resource *EnvResource, ba
 }
 
 // ネストブロックを比較
-func (d *HCLDiffer) compareBlocks(baseResource, resource *EnvResource, baseEnv, env string) []*DiffResult {
-	var results []*DiffResult
+func (d *HCLDiffer) compareBlocks(baseResource, resource *types.EnvResource, baseEnv, env string) []*types.DiffResult {
+	var results []*types.DiffResult
 
 	// 全ブロック型を収集
 	allBlockTypes := make(map[string]bool)
@@ -255,7 +256,7 @@ func (d *HCLDiffer) compareBlocks(baseResource, resource *EnvResource, baseEnv, 
 		}
 
 		for i := 0; i < maxLen; i++ {
-			var baseBlock, block *EnvBlock
+			var baseBlock, block *types.EnvBlock
 
 			if i < len(baseBlocks) {
 				baseBlock = baseBlocks[i]
@@ -268,7 +269,7 @@ func (d *HCLDiffer) compareBlocks(baseResource, resource *EnvResource, baseEnv, 
 			if baseBlock == nil && block != nil {
 				// 新しいブロックが追加された
 				resourcePath := fmt.Sprintf("%s.%s.%s[%d]", baseResource.Type, baseResource.Name, blockType, i)
-				diff := &DiffResult{
+				diff := &types.DiffResult{
 					Resource:    fmt.Sprintf("%s.%s", baseResource.Type, baseResource.Name),
 					Environment: env,
 					Path:        fmt.Sprintf("%s[%d]", blockType, i),
@@ -280,7 +281,7 @@ func (d *HCLDiffer) compareBlocks(baseResource, resource *EnvResource, baseEnv, 
 			} else if baseBlock != nil && block == nil {
 				// ブロックが削除された
 				resourcePath := fmt.Sprintf("%s.%s.%s[%d]", baseResource.Type, baseResource.Name, blockType, i)
-				diff := &DiffResult{
+				diff := &types.DiffResult{
 					Resource:    fmt.Sprintf("%s.%s", baseResource.Type, baseResource.Name),
 					Environment: env,
 					Path:        fmt.Sprintf("%s[%d]", blockType, i),
@@ -301,8 +302,8 @@ func (d *HCLDiffer) compareBlocks(baseResource, resource *EnvResource, baseEnv, 
 }
 
 // ブロック内属性を比較
-func (d *HCLDiffer) compareBlockAttributes(resource *EnvResource, baseBlock, block *EnvBlock, blockType string, index int, env string) []*DiffResult {
-	var results []*DiffResult
+func (d *HCLDiffer) compareBlockAttributes(resource *types.EnvResource, baseBlock, block *types.EnvBlock, blockType string, index int, env string) []*types.DiffResult {
+	var results []*types.DiffResult
 
 	// 全属性名を収集
 	allAttrNames := make(map[string]bool)
@@ -327,7 +328,7 @@ func (d *HCLDiffer) compareBlockAttributes(resource *EnvResource, baseBlock, blo
 
 		if !baseValue.Equals(value).True() {
 			resourcePath := fmt.Sprintf("%s.%s.%s[%d].%s", resource.Type, resource.Name, blockType, index, attrName)
-			diff := &DiffResult{
+			diff := &types.DiffResult{
 				Resource:    fmt.Sprintf("%s.%s", resource.Type, resource.Name),
 				Environment: env,
 				Path:        fmt.Sprintf("%s[%d].%s", blockType, index, attrName),
@@ -343,7 +344,7 @@ func (d *HCLDiffer) compareBlockAttributes(resource *EnvResource, baseBlock, blo
 }
 
 // formatBlockContent はブロックの内容を文字列としてフォーマットする
-func (d *HCLDiffer) formatBlockContent(block *EnvBlock) cty.Value {
+func (d *HCLDiffer) formatBlockContent(block *types.EnvBlock) cty.Value {
 	if block == nil {
 		return cty.NullVal(cty.String)
 	}

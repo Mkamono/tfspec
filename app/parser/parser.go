@@ -1,9 +1,10 @@
-package app
+package parser
 
 import (
 	"os"
 	"strings"
 
+	"github.com/Mkamono/tfspec/app/types"
 	"github.com/hashicorp/hcl/v2"
 	"github.com/hashicorp/hcl/v2/hclparse"
 	"github.com/hashicorp/hcl/v2/hclsyntax"
@@ -21,7 +22,7 @@ func NewHCLParser() *HCLParser {
 }
 
 // 標準的なTerraform HCLファイル解析（カスタム関数なし）
-func (p *HCLParser) ParseEnvFile(filename string) (*EnvResources, error) {
+func (p *HCLParser) ParseEnvFile(filename string) (*types.EnvResources, error) {
 	file, diags := p.parser.ParseHCLFile(filename)
 	if diags.HasErrors() {
 		return nil, diags
@@ -41,18 +42,18 @@ func (p *HCLParser) ParseEnvFile(filename string) (*EnvResources, error) {
 		return nil, diags
 	}
 
-	var resources []*EnvResource
+	var resources []*types.EnvResource
 
 	// 評価コンテキスト（空）
 	evalCtx := &hcl.EvalContext{}
 
 	// 各リソースブロックを処理
 	for _, block := range content.Blocks {
-		envResource := &EnvResource{
+		envResource := &types.EnvResource{
 			Type:   block.Labels[0],
 			Name:   block.Labels[1],
 			Attrs:  make(map[string]cty.Value),
-			Blocks: make(map[string][]*EnvBlock),
+			Blocks: make(map[string][]*types.EnvBlock),
 		}
 
 		// リソース内のコンテンツを解析（属性とネストブロック）
@@ -63,11 +64,11 @@ func (p *HCLParser) ParseEnvFile(filename string) (*EnvResources, error) {
 		resources = append(resources, envResource)
 	}
 
-	return &EnvResources{Resources: resources}, nil
+	return &types.EnvResources{Resources: resources}, nil
 }
 
 // リソース内のコンテンツを再帰的に解析（属性とネストブロック）
-func (p *HCLParser) parseResourceContent(body hcl.Body, evalCtx *hcl.EvalContext, resource *EnvResource) error {
+func (p *HCLParser) parseResourceContent(body hcl.Body, evalCtx *hcl.EvalContext, resource *types.EnvResource) error {
 	// 低レベルのhclsyntax.Bodyを使用して動的解析
 	if syntaxBody, ok := body.(*hclsyntax.Body); ok {
 		// 属性を解析
@@ -83,7 +84,7 @@ func (p *HCLParser) parseResourceContent(body hcl.Body, evalCtx *hcl.EvalContext
 
 		// ネストブロックを解析
 		for _, block := range syntaxBody.Blocks {
-			envBlock := &EnvBlock{
+			envBlock := &types.EnvBlock{
 				Type:   block.Type,
 				Labels: block.Labels,
 				Attrs:  make(map[string]cty.Value),
