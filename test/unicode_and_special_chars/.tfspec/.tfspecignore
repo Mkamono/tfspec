@@ -1,0 +1,8 @@
+# Unicode文字のテスト：日本語コメント
+aws_instance.web_日本語.instance_type
+
+# 特殊文字のテスト
+aws_instance.web-special_$chars.tags.日本語キー
+
+# 絵文字のテスト🚀
+aws_instance.web.tags.emoji_🌟

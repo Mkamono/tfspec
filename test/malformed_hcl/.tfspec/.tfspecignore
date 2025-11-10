@@ -1,0 +1,2 @@
+# HCL構文エラーのテスト用（本来はエラーが発生して処理されないケース）
+aws_instance.web.instance_type

@@ -1,10 +1,10 @@
-resource "aws_instance" "web" {
-  instance_type = "t3.micro"  # 意図的にt3.smallではなくt3.microに設定
+resource "aws_instance" "demo" {
+  instance_type = "t3.micro"  # env1では小さなインスタンス
   ami           = "ami-0abcdef1234567890"
 
   tags = {
-    Name = "web-server"
+    Name = "demo-server"
     Environment = "env1"
-    Project = "test"  # 仕様書で宣言されていない属性
+    Project = "demo"  # demoプロジェクト用の追加属性
   }
 }

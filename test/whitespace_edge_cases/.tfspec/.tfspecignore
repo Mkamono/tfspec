@@ -1,0 +1,13 @@
+# 空白文字のテスト用
+
+# タブと空白が混在するルール名
+	aws_instance.web.instance_type
+
+#　全角空白を含むコメント
+aws_instance.web.tags.Environment
+
+# 空行が多いファイルのテスト
+
+
+
+aws_instance.web.user_data    # 行末空白あり

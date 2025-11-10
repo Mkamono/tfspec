@@ -1,9 +1,9 @@
-resource "aws_instance" "web" {
-  instance_type = "t3.large"
+resource "aws_instance" "demo" {
+  instance_type = "t3.large"  # env3では大きなインスタンス
   ami           = "ami-0abcdef1234567890"
 
   tags = {
-    Name = "web-server"
-    Environment = "production"  # 意図的にenv3ではなくproductionに設定
+    Name = "demo-server"
+    Environment = "production"  # 本番環境では異なるタグ
   }
 }

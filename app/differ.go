@@ -22,6 +22,17 @@ func NewHCLDiffer(ignoreRules []string) *HCLDiffer {
 func (d *HCLDiffer) Compare(envResources map[string]*EnvResources) ([]*DiffResult, error) {
 	var results []*DiffResult
 
+	// .tfspecignoreルールの検証を実行
+	envResourcesMap := make(map[string]map[string]*EnvResource)
+	for envName, envRes := range envResources {
+		envResourcesMap[envName] = make(map[string]*EnvResource)
+		for _, resource := range envRes.Resources {
+			key := fmt.Sprintf("%s.%s", resource.Type, resource.Name)
+			envResourcesMap[envName][key] = resource
+		}
+	}
+	d.ignoreMatcher.ValidateRules(envResourcesMap)
+
 	// 環境名のスライスを作成（決定的な順序でソート）
 	var envNames []string
 	for envName := range envResources {
@@ -63,6 +74,11 @@ func (d *HCLDiffer) Compare(envResources map[string]*EnvResources) ([]*DiffResul
 	}
 
 	return results, nil
+}
+
+// GetIgnoreWarnings は.tfspecignoreルール検証で発見された警告を返す
+func (d *HCLDiffer) GetIgnoreWarnings() []string {
+	return d.ignoreMatcher.GetWarnings()
 }
 
 // リソース存在差分を検出

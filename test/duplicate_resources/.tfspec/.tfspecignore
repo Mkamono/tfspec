@@ -1,0 +1,4 @@
+# 重複リソースのテスト用（パーサーがどう処理するか）
+# 通常Terraformでは重複リソースはエラーになるが、tfspecがどう処理するかテスト
+aws_instance.web.instance_type
+aws_instance.web.tags.Environment

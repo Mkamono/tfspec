@@ -1,0 +1,5 @@
+# null値のテスト用
+aws_instance.web.user_data
+
+# オプショナル属性のテスト
+aws_instance.web.key_name

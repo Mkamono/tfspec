@@ -1,0 +1,8 @@
+# 巨大な値の差分テスト用
+aws_instance.web.user_data
+
+# 巨大な数値のテスト
+aws_instance.web.root_block_device
+
+# 長いリストのテスト
+aws_instance.web.security_groups

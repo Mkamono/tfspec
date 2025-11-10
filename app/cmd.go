@@ -96,6 +96,15 @@ func (app *TfspecApp) runCheck(envDirs []string, _ bool, outputFile string, outp
 		return fmt.Errorf("差分検出に失敗しました: %w", err)
 	}
 
+	// .tfspecignoreの警告を表示
+	warnings := app.differ.GetIgnoreWarnings()
+	for _, warning := range warnings {
+		fmt.Printf("⚠️  %s\n", warning)
+	}
+	if len(warnings) > 0 {
+		fmt.Println()
+	}
+
 	ignoredDiffs, driftDiffs := app.classifyDiffs(diffs)
 	envNames := app.extractEnvNames(envResources)
 

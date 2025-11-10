@@ -1,0 +1,7 @@
+# 深いネストブロックのテスト用
+# インデックス指定のテスト
+aws_security_group.complex.ingress[2]
+aws_security_group.complex.ingress[5].cidr_blocks
+
+# 多数のブロックがある場合のテスト
+aws_launch_configuration.complex.ebs_block_device[3]

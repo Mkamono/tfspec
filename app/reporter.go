@@ -126,7 +126,11 @@ func (r *ResultReporter) findResource(envResources *EnvResources, resourceName s
 // getResourceValue はリソースから指定パスの値を取得する
 func (r *ResultReporter) getResourceValue(resource *EnvResource, path string) cty.Value {
 	if path == "" {
-		return cty.NullVal(cty.String)
+		// リソース存在差分の場合：リソースが存在するかどうかを返す
+		if resource != nil {
+			return cty.BoolVal(true)
+		}
+		return cty.BoolVal(false)
 	}
 
 	if value, exists := resource.Attrs[path]; exists {
@@ -200,6 +204,10 @@ func (r *ResultReporter) writeTableRow(md *strings.Builder, row TableRow, envNam
 	for _, env := range envNames {
 		value := row.Values[env]
 		if value == "" {
+			value = "-"
+		}
+		// 無視されたリソース存在差分で false の場合は "-" に置換
+		if includeComment && row.Path == "" && value == "false" {
 			value = "-"
 		}
 		md.WriteString(" " + value + " |")
