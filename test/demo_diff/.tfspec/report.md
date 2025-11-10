@@ -2,14 +2,14 @@
 
 ## 🚨 意図されていない差分
 
-|              該当箇所              | ENV 1 | ENV 2 |   ENV 3    |
-|:----------------------------------:|:-----:|:-----:|:----------:|
-| aws_instance.demo.tags.Environment | env1  | env2  | production |
-|   aws_instance.demo.tags.Project   | demo  |   -   |     -      |
+| リソースタイプ |    リソース名     |     属性パス     | ENV 1 | ENV 2 |   ENV 3    |
+|:--------------:|:-----------------:|:----------------:|:-----:|:-----:|:----------:|
+|    resource    | aws_instance.demo | tags.Environment | env1  | env2  | production |
+|                |                   |   tags.Project   | demo  |   -   |     -      |
 
 ## 📝 無視された差分（意図的）
 
-|            該当箇所             |  ENV 1   |   ENV 2   |  ENV 3   |              理由              |
-|:-------------------------------:|:--------:|:---------:|:--------:|:------------------------------:|
-| aws_instance.demo.instance_type | t3.micro | t3.medium | t3.large | Demo configuration differences |
+| リソースタイプ |    リソース名     |   属性パス    |  ENV 1   |   ENV 2   |  ENV 3   |              理由              |
+|:--------------:|:-----------------:|:-------------:|:--------:|:---------:|:--------:|:------------------------------:|
+|    resource    | aws_instance.demo | instance_type | t3.micro | t3.medium | t3.large | Demo configuration differences |
 

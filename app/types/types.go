@@ -73,3 +73,14 @@ type TableRow struct {
 	Comment  string            // .tfspecignoreのコメント（無視された差分用）
 }
 
+// GroupedTableRow は階層化されたテーブル用のデータ構造
+type GroupedTableRow struct {
+	ResourceType string    // リソースタイプ (aws_instance, local, output等)
+	ResourceName string    // リソース名 (web, db等)
+	Path         string    // 属性パス
+	Values       map[string]string // 環境名 -> 値
+	Comment      string    // .tfspecignoreのコメント（無視された差分用）
+	IsFirstInGroup bool    // グループの最初の行かどうか
+	IsFirstInResource bool // リソースの最初の行かどうか
+}
+
