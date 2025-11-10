@@ -39,7 +39,8 @@ func (app *TfspecApp) CreateRootCommand() *cobra.Command {
 			outputFile, _ := cmd.Flags().GetString("output")
 			outputFlag := cmd.Flags().Changed("output")
 			noFail, _ := cmd.Flags().GetBool("no-fail")
-			return app.appService.RunCheck(args, verbose, outputFile, outputFlag, noFail)
+			excludeDirs, _ := cmd.Flags().GetStringSlice("exclude-dirs")
+			return app.appService.RunCheck(args, verbose, outputFile, outputFlag, noFail, excludeDirs)
 		},
 	}
 
@@ -47,6 +48,7 @@ func (app *TfspecApp) CreateRootCommand() *cobra.Command {
 	checkCmd.Flags().StringP("output", "o", "", "結果をMarkdownファイルに出力 (例: -o report.md, -o単体で.tfspec/report.mdに出力)")
 	checkCmd.Flags().Lookup("output").NoOptDefVal = ".tfspec/report.md"
 	checkCmd.Flags().Bool("no-fail", false, "構成ドリフトが検出されてもエラーコードで終了しない")
+	checkCmd.Flags().StringSliceP("exclude-dirs", "e", []string{}, "除外するディレクトリ名 (例: --exclude-dirs node_modules,vendor)")
 
 	rootCmd.AddCommand(checkCmd)
 	return rootCmd

@@ -8,10 +8,11 @@ import (
 
 // Config はアプリケーションの設定を管理する
 type Config struct {
-	TfspecDir string
-	EnvDirs   []string
-	Verbose   bool
-	NoFail    bool
+	TfspecDir   string
+	EnvDirs     []string
+	Verbose     bool
+	NoFail      bool
+	ExcludeDirs []string
 }
 
 // ConfigService は設定関連の処理を担当する
@@ -22,22 +23,23 @@ func NewConfigService() *ConfigService {
 }
 
 // LoadConfig は設定を読み込んで検証する
-func (s *ConfigService) LoadConfig(envDirs []string, verbose, noFail bool) (*Config, error) {
+func (s *ConfigService) LoadConfig(envDirs []string, verbose, noFail bool, excludeDirs []string) (*Config, error) {
 	tfspecDir, err := s.setupTfspecDir()
 	if err != nil {
 		return nil, err
 	}
 
-	resolvedEnvDirs, err := s.resolveEnvDirs(envDirs)
+	resolvedEnvDirs, err := s.resolveEnvDirs(envDirs, excludeDirs)
 	if err != nil {
 		return nil, err
 	}
 
 	return &Config{
-		TfspecDir: tfspecDir,
-		EnvDirs:   resolvedEnvDirs,
-		Verbose:   verbose,
-		NoFail:    noFail,
+		TfspecDir:   tfspecDir,
+		EnvDirs:     resolvedEnvDirs,
+		Verbose:     verbose,
+		NoFail:      noFail,
+		ExcludeDirs: excludeDirs,
 	}, nil
 }
 
@@ -59,14 +61,14 @@ func (s *ConfigService) setupTfspecDir() (string, error) {
 }
 
 // resolveEnvDirs は環境ディレクトリを解決する
-func (s *ConfigService) resolveEnvDirs(envDirs []string) ([]string, error) {
+func (s *ConfigService) resolveEnvDirs(envDirs []string, excludeDirs []string) ([]string, error) {
 	if len(envDirs) == 0 {
 		cwd, err := os.Getwd()
 		if err != nil {
 			return nil, fmt.Errorf("現在のディレクトリを取得できませんでした: %w", err)
 		}
 
-		envDirs, err = s.detectEnvDirs(cwd)
+		envDirs, err = s.detectEnvDirs(cwd, excludeDirs)
 		if err != nil {
 			return nil, fmt.Errorf("環境ディレクトリの自動検出に失敗しました: %w", err)
 		}
@@ -78,11 +80,14 @@ func (s *ConfigService) resolveEnvDirs(envDirs []string) ([]string, error) {
 	}
 
 	fmt.Printf("対象環境: %v\n", envDirs)
+	if len(excludeDirs) > 0 {
+		fmt.Printf("除外ディレクトリ: %v\n", excludeDirs)
+	}
 	return envDirs, nil
 }
 
 // detectEnvDirs は環境ディレクトリを自動検出する
-func (s *ConfigService) detectEnvDirs(baseDir string) ([]string, error) {
+func (s *ConfigService) detectEnvDirs(baseDir string, excludeDirs []string) ([]string, error) {
 	var envDirs []string
 
 	entries, err := os.ReadDir(baseDir)
@@ -92,6 +97,11 @@ func (s *ConfigService) detectEnvDirs(baseDir string) ([]string, error) {
 
 	for _, entry := range entries {
 		if !entry.IsDir() || entry.Name() == ".tfspec" {
+			continue
+		}
+
+		// 除外ディレクトリをチェック
+		if s.isExcluded(entry.Name(), excludeDirs) {
 			continue
 		}
 
@@ -126,4 +136,14 @@ func (s *ConfigService) hasTerraformFiles(dir string) (bool, error) {
 	}
 
 	return false, nil
+}
+
+// isExcluded はディレクトリ名が除外リストに含まれているかをチェックする
+func (s *ConfigService) isExcluded(dirName string, excludeDirs []string) bool {
+	for _, excludeDir := range excludeDirs {
+		if dirName == excludeDir {
+			return true
+		}
+	}
+	return false
 }

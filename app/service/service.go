@@ -36,9 +36,9 @@ func NewAppServiceWithDeps(
 }
 
 // RunCheck はcheckコマンドのメインロジックを実行する
-func (s *AppService) RunCheck(envDirs []string, verbose bool, outputFile string, outputFlag bool, noFail bool) error {
+func (s *AppService) RunCheck(envDirs []string, verbose bool, outputFile string, outputFlag bool, noFail bool, excludeDirs []string) error {
 	// 設定の読み込み
-	config, err := s.configService.LoadConfig(envDirs, verbose, noFail)
+	config, err := s.configService.LoadConfig(envDirs, verbose, noFail, excludeDirs)
 	if err != nil {
 		return err
 	}

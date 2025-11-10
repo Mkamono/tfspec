@@ -7,7 +7,7 @@ import (
 
 // ConfigServiceInterface は設定サービスのインターフェース
 type ConfigServiceInterface interface {
-	LoadConfig(envDirs []string, verbose, noFail bool) (*config.Config, error)
+	LoadConfig(envDirs []string, verbose, noFail bool, excludeDirs []string) (*config.Config, error)
 }
 
 // AnalyzerServiceInterface は分析サービスのインターフェース
