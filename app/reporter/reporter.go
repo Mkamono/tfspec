@@ -371,11 +371,8 @@ func (r *ResultReporter) buildGroupedMarkdownTable(rows []types.GroupedTableRow,
 			resourceName = ""  // 空欄で上のセルと同じリソースであることを表現
 		}
 
-		// 属性パス（空の場合は"-"）
+		// 属性パス（空の場合は空欄）
 		pathDisplay := row.Path
-		if pathDisplay == "" {
-			pathDisplay = "-"
-		}
 
 		rowData := []any{resourceType, resourceName, pathDisplay}
 
