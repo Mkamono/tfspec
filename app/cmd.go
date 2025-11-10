@@ -8,25 +8,19 @@ import (
 	"strings"
 
 	"github.com/spf13/cobra"
-	"github.com/zclconf/go-cty/cty"
 )
 
 type TfspecApp struct {
-	parser *HCLParser
-	differ *HCLDiffer
-}
-
-// Markdownテーブル用のデータ構造
-type TableRow struct {
-	Resource string
-	Path     string
-	Values   map[string]string // 環境名 -> 値
-	Comment  string            // .tfspecignoreのコメント（無視された差分用）
+	parser    *HCLParser
+	differ    *HCLDiffer
+	formatter *ValueFormatter
+	envDirs   []string
 }
 
 func NewTfspecApp() *TfspecApp {
 	return &TfspecApp{
-		parser: NewHCLParser(),
+		parser:    NewHCLParser(),
+		formatter: NewValueFormatter(),
 		// differ: は実行時にignoreRulesロード後に初期化
 	}
 }
@@ -69,34 +63,70 @@ func (app *TfspecApp) CreateRootCommand() *cobra.Command {
 }
 
 func (app *TfspecApp) runCheck(envDirs []string, _ bool, outputFile string, outputFlag bool, noFail bool) error {
+	// 初期化フェーズ
+	if err := app.initialize(envDirs); err != nil {
+		return err
+	}
+
+	// 差分分析フェーズ
+	diffs, envResources, ruleComments, envNames, err := app.analyzeDifferences()
+	if err != nil {
+		return err
+	}
+
+	// 結果出力フェーズ
+	if err := app.outputResults(diffs, envNames, ruleComments, envResources, outputFile, outputFlag); err != nil {
+		return err
+	}
+
+	// 結果評価フェーズ
+	return app.evaluateResults(diffs, noFail)
+}
+
+// initialize は初期化処理を担当する
+func (app *TfspecApp) initialize(envDirs []string) error {
 	tfspecDir, err := app.setupTfspecDir()
 	if err != nil {
 		return err
 	}
 
-	ignoreRules, ruleComments, err := app.loadIgnoreRules(tfspecDir)
+	ignoreRules, _, err := app.loadIgnoreRules(tfspecDir)
 	if err != nil {
 		return err
 	}
 
 	app.differ = NewHCLDiffer(ignoreRules)
 
-	envDirs, err = app.resolveEnvDirs(envDirs)
-	if err != nil {
-		return err
-	}
+	app.envDirs, err = app.resolveEnvDirs(envDirs)
+	return err
+}
 
-	envResources, err := app.parseEnvironments(envDirs)
+// analyzeDifferences は差分分析処理を担当する
+func (app *TfspecApp) analyzeDifferences() ([]*DiffResult, map[string]*EnvResources, map[string]string, []string, error) {
+	envResources, err := app.parseEnvironments(app.envDirs)
 	if err != nil {
-		return err
+		return nil, nil, nil, nil, err
 	}
 
 	diffs, err := app.differ.Compare(envResources)
 	if err != nil {
-		return fmt.Errorf("差分検出に失敗しました: %w", err)
+		return nil, nil, nil, nil, fmt.Errorf("差分検出に失敗しました: %w", err)
 	}
 
 	// .tfspecignoreの警告を表示
+	app.displayIgnoreWarnings()
+
+	// 無視ルールコメント情報を再取得
+	tfspecDir, _ := app.setupTfspecDir()
+	_, ruleComments, _ := app.loadIgnoreRules(tfspecDir)
+
+	envNames := app.extractEnvNames(envResources)
+
+	return diffs, envResources, ruleComments, envNames, nil
+}
+
+// displayIgnoreWarnings は無視ルールの警告を表示する
+func (app *TfspecApp) displayIgnoreWarnings() {
 	warnings := app.differ.GetIgnoreWarnings()
 	for _, warning := range warnings {
 		fmt.Printf("⚠️  %s\n", warning)
@@ -104,14 +134,11 @@ func (app *TfspecApp) runCheck(envDirs []string, _ bool, outputFile string, outp
 	if len(warnings) > 0 {
 		fmt.Println()
 	}
+}
 
+// evaluateResults は結果を評価し、適切な終了コードを決定する
+func (app *TfspecApp) evaluateResults(diffs []*DiffResult, noFail bool) error {
 	ignoredDiffs, driftDiffs := app.classifyDiffs(diffs)
-	envNames := app.extractEnvNames(envResources)
-
-	if err := app.outputResults(diffs, envNames, ruleComments, envResources, outputFile, outputFlag); err != nil {
-		return err
-	}
-
 	app.printSummary(ignoredDiffs, driftDiffs)
 
 	if len(driftDiffs) > 0 && !noFail {
@@ -125,12 +152,13 @@ func (app *TfspecApp) runCheck(envDirs []string, _ bool, outputFile string, outp
 func (app *TfspecApp) setupTfspecDir() (string, error) {
 	cwd, err := os.Getwd()
 	if err != nil {
-		return "", fmt.Errorf("現在のディレクトリを取得できません: %w", err)
+		return "", fmt.Errorf("現在のディレクトリを取得できませんでした: %w", err)
 	}
 
 	tfspecDir := filepath.Join(cwd, ".tfspec")
 	if _, err := os.Stat(tfspecDir); os.IsNotExist(err) {
-		return "", fmt.Errorf(".tfspecディレクトリが見つかりません: %s", tfspecDir)
+		return "", fmt.Errorf(".tfspecディレクトリが見つかりません。パス: %s\n" +
+			"ヒント: プロジェクトルートで '.tfspec' ディレクトリを作成してください", tfspecDir)
 	}
 
 	return tfspecDir, nil
@@ -140,15 +168,16 @@ func (app *TfspecApp) setupTfspecDir() (string, error) {
 func (app *TfspecApp) loadIgnoreRules(tfspecDir string) ([]string, map[string]string, error) {
 	ignoreRules, err := LoadIgnoreRules(tfspecDir)
 	if err != nil {
-		return nil, nil, fmt.Errorf(".tfspecignoreの読み込みに失敗しました: %w", err)
+		return nil, nil, fmt.Errorf(".tfspecignoreファイルの読み込みに失敗しました: %w\n" +
+			"ヒント: .tfspec/.tfspecignore ファイルまたは .tfspec/.tfspecignore/ ディレクトリを確認してください", err)
 	}
 
 	ruleComments, err := LoadIgnoreRulesWithComments(tfspecDir)
 	if err != nil {
-		return nil, nil, fmt.Errorf(".tfspecignoreのコメント読み込みに失敗しました: %w", err)
+		return nil, nil, fmt.Errorf(".tfspecignoreのコメント情報の読み込みに失敗しました: %w", err)
 	}
 
-	fmt.Printf("無視ルール: %d件\n", len(ignoreRules))
+	fmt.Printf("無視ルールを読み込みました: %d件\n", len(ignoreRules))
 	return ignoreRules, ruleComments, nil
 }
 
@@ -157,42 +186,56 @@ func (app *TfspecApp) resolveEnvDirs(envDirs []string) ([]string, error) {
 	if len(envDirs) == 0 {
 		cwd, err := os.Getwd()
 		if err != nil {
-			return nil, fmt.Errorf("現在のディレクトリを取得できません: %w", err)
+			return nil, fmt.Errorf("現在のディレクトリを取得できませんでした: %w", err)
 		}
 
 		envDirs, err = app.detectEnvDirs(cwd)
 		if err != nil {
-			return nil, fmt.Errorf("環境ディレクトリの検出に失敗しました: %w", err)
+			return nil, fmt.Errorf("環境ディレクトリの自動検出に失敗しました: %w", err)
 		}
 	}
 
 	if len(envDirs) == 0 {
-		return nil, fmt.Errorf("環境ディレクトリが見つかりません")
+		return nil, fmt.Errorf("環境ディレクトリが見つかりませんでした\n" +
+			"ヒント: main.hclファイルを含むディレクトリを作成するか、コマンドライン引数で環境ディレクトリを指定してください")
 	}
 
-	fmt.Printf("環境ディレクトリ: %v\n", envDirs)
+	fmt.Printf("対象環境: %v\n", envDirs)
 	return envDirs, nil
 }
 
 // parseEnvironments は全環境のリソースを解析する
 func (app *TfspecApp) parseEnvironments(envDirs []string) (map[string]*EnvResources, error) {
 	envResources := make(map[string]*EnvResources)
+	var skippedFiles []string
+
 	for _, envDir := range envDirs {
 		envName := filepath.Base(envDir)
 		envFile := filepath.Join(envDir, "main.hcl")
 
 		if _, err := os.Stat(envFile); os.IsNotExist(err) {
-			fmt.Printf("警告: 環境ファイルが見つかりません: %s\n", envFile)
+			skippedFiles = append(skippedFiles, envFile)
 			continue
 		}
 
 		envResource, err := app.parser.ParseEnvFile(envFile)
 		if err != nil {
-			return nil, fmt.Errorf("環境ファイルの解析に失敗しました (%s): %w", envFile, err)
+			return nil, fmt.Errorf("環境ファイルの解析に失敗しました:\n  ファイル: %s\n  エラー: %w\n" +
+				"ヒント: HCL構文を確認してください", envFile, err)
 		}
 
 		envResources[envName] = envResource
 	}
+
+	if len(skippedFiles) > 0 {
+		fmt.Printf("⚠️  以下のファイルをスキップしました: %v\n", skippedFiles)
+	}
+
+	if len(envResources) == 0 {
+		return nil, fmt.Errorf("解析可能な環境ファイルが見つかりませんでした\n" +
+			"ヒント: 各環境ディレクトリに main.hcl ファイルを作成してください")
+	}
+
 	return envResources, nil
 }
 
@@ -222,21 +265,23 @@ func (app *TfspecApp) extractEnvNames(envResources map[string]*EnvResources) []s
 // outputResults は結果を出力する
 func (app *TfspecApp) outputResults(diffs []*DiffResult, envNames []string, ruleComments map[string]string, envResources map[string]*EnvResources, outputFile string, outputFlag bool) error {
 	reporter := NewResultReporter()
-	markdownOutput := reporter.GenerateMarkdown(diffs, envNames, ruleComments, envResources, app)
+	markdownOutput := reporter.GenerateMarkdown(diffs, envNames, ruleComments, envResources)
 
 	fmt.Print(markdownOutput)
 
 	if outputFlag {
 		if strings.Contains(outputFile, ".tfspec/") {
 			if err := os.MkdirAll(".tfspec", 0755); err != nil {
-				return fmt.Errorf(".tfspecディレクトリの作成に失敗しました: %w", err)
+				return fmt.Errorf(".tfspecディレクトリの作成に失敗しました:\n  パス: %s\n  エラー: %w",
+					".tfspec", err)
 			}
 		}
 		err := os.WriteFile(outputFile, []byte(markdownOutput), 0644)
 		if err != nil {
-			return fmt.Errorf("ファイル出力に失敗しました: %w", err)
+			return fmt.Errorf("レポートファイルの出力に失敗しました:\n  ファイル: %s\n  エラー: %w\n" +
+				"ヒント: ディレクトリの書き込み権限を確認してください", outputFile, err)
 		}
-		fmt.Printf("結果を %s に出力しました。\n", outputFile)
+		fmt.Printf("📄 結果レポートを出力しました: %s\n", outputFile)
 	}
 	return nil
 }
@@ -277,54 +322,4 @@ func (app *TfspecApp) detectEnvDirs(baseDir string) ([]string, error) {
 }
 
 
-func (app *TfspecApp) formatValue(val interface{}) string {
-	if val == nil {
-		return ""
-	}
-
-	if ctyVal, ok := val.(cty.Value); ok {
-		if ctyVal.IsNull() {
-			return ""
-		}
-		if ctyVal.Type() == cty.String {
-			return ctyVal.AsString()
-		}
-		if ctyVal.Type() == cty.Number {
-			if bigFloat := ctyVal.AsBigFloat(); bigFloat.IsInt() {
-				if val, accuracy := bigFloat.Int64(); accuracy == 0 {
-					return fmt.Sprintf("%d", val)
-				}
-			}
-			return ctyVal.AsBigFloat().String()
-		}
-		if ctyVal.Type() == cty.Bool {
-			if ctyVal.True() {
-				return "true"
-			}
-			return "false"
-		}
-		// リストまたはタプル型の場合
-		if ctyVal.Type().IsListType() || ctyVal.Type().IsTupleType() || ctyVal.Type().IsSetType() {
-			var elements []string
-			for it := ctyVal.ElementIterator(); it.Next(); {
-				_, val := it.Element()
-				elements = append(elements, app.formatValue(val))
-			}
-			return fmt.Sprintf("[%s]", strings.Join(elements, ", "))
-		}
-		// オブジェクト型またはマップ型の場合
-		if ctyVal.Type().IsObjectType() || ctyVal.Type().IsMapType() {
-			var pairs []string
-			for it := ctyVal.ElementIterator(); it.Next(); {
-				key, val := it.Element()
-				pairs = append(pairs, fmt.Sprintf("%s: %s", app.formatValue(key), app.formatValue(val)))
-			}
-			return fmt.Sprintf("{%s}", strings.Join(pairs, ", "))
-		}
-		// その他の型の場合
-		return fmt.Sprintf("%s", ctyVal)
-	}
-
-	return fmt.Sprintf("%v", val)
-}
 

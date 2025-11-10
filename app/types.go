@@ -32,3 +32,11 @@ type DiffResult struct {
 	IsIgnored   bool // 新設計：.tfspecignoreに記載されているかどうか
 }
 
+// TableRow はMarkdownテーブル用のデータ構造
+type TableRow struct {
+	Resource string
+	Path     string
+	Values   map[string]string // 環境名 -> 値
+	Comment  string            // .tfspecignoreのコメント（無視された差分用）
+}
+

@@ -8,20 +8,24 @@ import (
 )
 
 // ResultReporter はテーブル形式の結果出力を担当する
-type ResultReporter struct{}
+type ResultReporter struct {
+	formatter *ValueFormatter
+}
 
 func NewResultReporter() *ResultReporter {
-	return &ResultReporter{}
+	return &ResultReporter{
+		formatter: NewValueFormatter(),
+	}
 }
 
 // GenerateMarkdown は差分結果をMarkdownテーブル形式で出力する
-func (r *ResultReporter) GenerateMarkdown(diffs []*DiffResult, envNames []string, ruleComments map[string]string, envResources map[string]*EnvResources, app *TfspecApp) string {
-	driftTable, ignoredTable := r.buildTables(diffs, envNames, ruleComments, envResources, app)
+func (r *ResultReporter) GenerateMarkdown(diffs []*DiffResult, envNames []string, ruleComments map[string]string, envResources map[string]*EnvResources) string {
+	driftTable, ignoredTable := r.buildTables(diffs, envNames, ruleComments, envResources)
 	return r.generateMarkdownTables(driftTable, ignoredTable, envNames)
 }
 
 // buildTables は差分データをテーブル形式に変換する
-func (r *ResultReporter) buildTables(diffs []*DiffResult, envNames []string, ruleComments map[string]string, envResources map[string]*EnvResources, app *TfspecApp) ([]TableRow, []TableRow) {
+func (r *ResultReporter) buildTables(diffs []*DiffResult, envNames []string, ruleComments map[string]string, envResources map[string]*EnvResources) ([]TableRow, []TableRow) {
 	driftRows := make(map[string]*TableRow)
 	ignoredRows := make(map[string]*TableRow)
 
@@ -56,18 +60,18 @@ func (r *ResultReporter) buildTables(diffs []*DiffResult, envNames []string, rul
 			}
 		}
 
-		row.Values[diff.Environment] = app.formatValue(diff.Actual)
+		row.Values[diff.Environment] = r.formatter.FormatValue(diff.Actual)
 
 		if !diff.Expected.IsNull() {
 			baseEnv := envNames[0]
 			if _, exists := row.Values[baseEnv]; !exists {
-				row.Values[baseEnv] = app.formatValue(diff.Expected)
+				row.Values[baseEnv] = r.formatter.FormatValue(diff.Expected)
 			}
 		}
 	}
 
-	r.fillMissingValues(driftRows, envNames, envResources, app)
-	r.fillMissingValues(ignoredRows, envNames, envResources, app)
+	r.fillMissingValues(driftRows, envNames, envResources)
+	r.fillMissingValues(ignoredRows, envNames, envResources)
 
 	var driftTable, ignoredTable []TableRow
 	for _, row := range driftRows {
@@ -88,7 +92,7 @@ func (r *ResultReporter) buildTables(diffs []*DiffResult, envNames []string, rul
 }
 
 // fillMissingValues は欠損している環境の値を補填する
-func (r *ResultReporter) fillMissingValues(rows map[string]*TableRow, envNames []string, envResources map[string]*EnvResources, app *TfspecApp) {
+func (r *ResultReporter) fillMissingValues(rows map[string]*TableRow, envNames []string, envResources map[string]*EnvResources) {
 	for _, row := range rows {
 		for _, envName := range envNames {
 			if _, exists := row.Values[envName]; exists {
@@ -100,7 +104,7 @@ func (r *ResultReporter) fillMissingValues(rows map[string]*TableRow, envNames [
 				if resource != nil {
 					value := r.getResourceValue(resource, row.Path)
 					if !value.IsNull() {
-						row.Values[envName] = app.formatValue(value)
+						row.Values[envName] = r.formatter.FormatValue(value)
 					} else {
 						row.Values[envName] = ""
 					}
