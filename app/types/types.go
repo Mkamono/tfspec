@@ -13,8 +13,41 @@ type EnvResource struct {
 	Blocks map[string][]*EnvBlock
 }
 
+// 新しいブロックタイプ用の構造体
+type EnvModule struct {
+	Name   string
+	Attrs  map[string]cty.Value
+}
+
+type EnvLocal struct {
+	Name  string
+	Value cty.Value
+}
+
+type EnvVariable struct {
+	Name   string
+	Attrs  map[string]cty.Value
+}
+
+type EnvOutput struct {
+	Name   string
+	Attrs  map[string]cty.Value
+}
+
+type EnvData struct {
+	Type   string
+	Name   string
+	Attrs  map[string]cty.Value
+	Blocks map[string][]*EnvBlock
+}
+
 type EnvResources struct {
 	Resources []*EnvResource
+	Modules   []*EnvModule
+	Locals    []*EnvLocal
+	Variables []*EnvVariable
+	Outputs   []*EnvOutput
+	DataSources []*EnvData
 }
 
 type EnvBlock struct {

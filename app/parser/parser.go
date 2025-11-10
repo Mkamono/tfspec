@@ -24,6 +24,11 @@ func NewHCLParser() *HCLParser {
 // ParseMultipleFiles は複数の.tf/.hclファイルを結合して解析する
 func (p *HCLParser) ParseMultipleFiles(filenames []string) (*types.EnvResources, error) {
 	var allResources []*types.EnvResource
+	var allModules []*types.EnvModule
+	var allLocals []*types.EnvLocal
+	var allVariables []*types.EnvVariable
+	var allOutputs []*types.EnvOutput
+	var allDataSources []*types.EnvData
 
 	// 各ファイルを順番に解析して結合
 	for _, filename := range filenames {
@@ -32,9 +37,21 @@ func (p *HCLParser) ParseMultipleFiles(filenames []string) (*types.EnvResources,
 			return nil, err
 		}
 		allResources = append(allResources, envResources.Resources...)
+		allModules = append(allModules, envResources.Modules...)
+		allLocals = append(allLocals, envResources.Locals...)
+		allVariables = append(allVariables, envResources.Variables...)
+		allOutputs = append(allOutputs, envResources.Outputs...)
+		allDataSources = append(allDataSources, envResources.DataSources...)
 	}
 
-	return &types.EnvResources{Resources: allResources}, nil
+	return &types.EnvResources{
+		Resources:   allResources,
+		Modules:     allModules,
+		Locals:      allLocals,
+		Variables:   allVariables,
+		Outputs:     allOutputs,
+		DataSources: allDataSources,
+	}, nil
 }
 
 // 標準的なTerraform HCLファイル解析（カスタム関数なし）
@@ -44,11 +61,31 @@ func (p *HCLParser) ParseEnvFile(filename string) (*types.EnvResources, error) {
 		return nil, diags
 	}
 
-	// Terraformの resource ブロックを解析
+	// Terraformの全ブロックタイプを解析
 	content, _, diags := file.Body.PartialContent(&hcl.BodySchema{
 		Blocks: []hcl.BlockHeaderSchema{
 			{
 				Type:       "resource",
+				LabelNames: []string{"type", "name"},
+			},
+			{
+				Type:       "module",
+				LabelNames: []string{"name"},
+			},
+			{
+				Type:       "locals",
+				LabelNames: []string{},
+			},
+			{
+				Type:       "variable",
+				LabelNames: []string{"name"},
+			},
+			{
+				Type:       "output",
+				LabelNames: []string{"name"},
+			},
+			{
+				Type:       "data",
 				LabelNames: []string{"type", "name"},
 			},
 		},
@@ -59,28 +96,102 @@ func (p *HCLParser) ParseEnvFile(filename string) (*types.EnvResources, error) {
 	}
 
 	var resources []*types.EnvResource
+	var modules []*types.EnvModule
+	var locals []*types.EnvLocal
+	var variables []*types.EnvVariable
+	var outputs []*types.EnvOutput
+	var dataSources []*types.EnvData
 
 	// 評価コンテキスト（空）
 	evalCtx := &hcl.EvalContext{}
 
-	// 各リソースブロックを処理
+	// 各ブロックタイプを処理
 	for _, block := range content.Blocks {
-		envResource := &types.EnvResource{
-			Type:   block.Labels[0],
-			Name:   block.Labels[1],
-			Attrs:  make(map[string]cty.Value),
-			Blocks: make(map[string][]*types.EnvBlock),
-		}
+		switch block.Type {
+		case "resource":
+			envResource := &types.EnvResource{
+				Type:   block.Labels[0],
+				Name:   block.Labels[1],
+				Attrs:  make(map[string]cty.Value),
+				Blocks: make(map[string][]*types.EnvBlock),
+			}
 
-		// リソース内のコンテンツを解析（属性とネストブロック）
-		if err := p.parseResourceContent(block.Body, evalCtx, envResource); err != nil {
-			return nil, err
-		}
+			if err := p.parseResourceContent(block.Body, evalCtx, envResource); err != nil {
+				return nil, err
+			}
 
-		resources = append(resources, envResource)
+			resources = append(resources, envResource)
+
+		case "module":
+			envModule := &types.EnvModule{
+				Name:  block.Labels[0],
+				Attrs: make(map[string]cty.Value),
+			}
+
+			if err := p.parseSimpleBlockContent(block.Body, evalCtx, envModule.Attrs); err != nil {
+				return nil, err
+			}
+
+			modules = append(modules, envModule)
+
+		case "locals":
+			if err := p.parseLocalsContent(block.Body, evalCtx, &locals); err != nil {
+				return nil, err
+			}
+
+		case "variable":
+			envVariable := &types.EnvVariable{
+				Name:  block.Labels[0],
+				Attrs: make(map[string]cty.Value),
+			}
+
+			if err := p.parseSimpleBlockContent(block.Body, evalCtx, envVariable.Attrs); err != nil {
+				return nil, err
+			}
+
+			variables = append(variables, envVariable)
+
+		case "output":
+			envOutput := &types.EnvOutput{
+				Name:  block.Labels[0],
+				Attrs: make(map[string]cty.Value),
+			}
+
+			if err := p.parseSimpleBlockContent(block.Body, evalCtx, envOutput.Attrs); err != nil {
+				return nil, err
+			}
+
+			outputs = append(outputs, envOutput)
+
+		case "data":
+			envData := &types.EnvData{
+				Type:   block.Labels[0],
+				Name:   block.Labels[1],
+				Attrs:  make(map[string]cty.Value),
+				Blocks: make(map[string][]*types.EnvBlock),
+			}
+
+			if err := p.parseResourceContent(block.Body, evalCtx, &types.EnvResource{
+				Type:   envData.Type,
+				Name:   envData.Name,
+				Attrs:  envData.Attrs,
+				Blocks: envData.Blocks,
+			}); err != nil {
+				return nil, err
+			}
+
+			dataSources = append(dataSources, envData)
+		}
 	}
 
-	return &types.EnvResources{Resources: resources}, nil
+	return &types.EnvResources{
+		Resources:   resources,
+		Modules:     modules,
+		Locals:      locals,
+		Variables:   variables,
+		Outputs:     outputs,
+		DataSources: dataSources,
+	}, nil
 }
 
 // リソース内のコンテンツを再帰的に解析（属性とネストブロック）
@@ -138,6 +249,84 @@ func (p *HCLParser) parseResourceContent(body hcl.Body, evalCtx *hcl.EvalContext
 		} else {
 			resource.Attrs[name] = value
 		}
+	}
+
+	return nil
+}
+
+// parseSimpleBlockContent は単純なブロック（module、variable、outputなど）の属性を解析
+func (p *HCLParser) parseSimpleBlockContent(body hcl.Body, evalCtx *hcl.EvalContext, attrs map[string]cty.Value) error {
+	if syntaxBody, ok := body.(*hclsyntax.Body); ok {
+		// 属性を解析
+		for name, attr := range syntaxBody.Attributes {
+			value, diags := attr.Expr.Value(evalCtx)
+			if diags.HasErrors() {
+				// 変数参照などの解決不能な値は特別な値として保存
+				attrs[name] = cty.StringVal("${unresolved_reference}")
+			} else {
+				attrs[name] = value
+			}
+		}
+		return nil
+	}
+
+	// fallback: 高レベルAPI
+	attributes, diags := body.JustAttributes()
+	if diags.HasErrors() {
+		return diags
+	}
+
+	for name, attr := range attributes {
+		value, diags := attr.Expr.Value(evalCtx)
+		if diags.HasErrors() {
+			attrs[name] = cty.StringVal("${unresolved_reference}")
+		} else {
+			attrs[name] = value
+		}
+	}
+
+	return nil
+}
+
+// parseLocalsContent はlocalsブロック内のローカル変数を解析
+func (p *HCLParser) parseLocalsContent(body hcl.Body, evalCtx *hcl.EvalContext, locals *[]*types.EnvLocal) error {
+	if syntaxBody, ok := body.(*hclsyntax.Body); ok {
+		// localsブロック内の属性を解析
+		for name, attr := range syntaxBody.Attributes {
+			value, diags := attr.Expr.Value(evalCtx)
+			if diags.HasErrors() {
+				// 変数参照などの解決不能な値は特別な値として保存
+				value = cty.StringVal("${unresolved_reference}")
+			}
+
+			envLocal := &types.EnvLocal{
+				Name:  name,
+				Value: value,
+			}
+
+			*locals = append(*locals, envLocal)
+		}
+		return nil
+	}
+
+	// fallback: 高レベルAPI
+	attributes, diags := body.JustAttributes()
+	if diags.HasErrors() {
+		return diags
+	}
+
+	for name, attr := range attributes {
+		value, diags := attr.Expr.Value(evalCtx)
+		if diags.HasErrors() {
+			value = cty.StringVal("${unresolved_reference}")
+		}
+
+		envLocal := &types.EnvLocal{
+			Name:  name,
+			Value: value,
+		}
+
+		*locals = append(*locals, envLocal)
 	}
 
 	return nil
