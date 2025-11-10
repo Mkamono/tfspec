@@ -835,11 +835,28 @@ func (d *HCLDiffer) compareDataSources(baseDataSources, envDataSources []*types.
 		}
 	}
 
-	// 属性差分をチェック
+	// 属性差分とブロック差分をチェック
 	for key, baseData := range baseDataMap {
 		if envData, exists := envDataMap[key]; exists {
+			// 属性差分を比較
 			attrDiffs := d.compareDataSourceAttributes(baseData, envData, baseEnv, env)
 			results = append(results, attrDiffs...)
+
+			// ブロック差分を比較（EnvDataをEnvResourceに変換）
+			baseResource := &types.EnvResource{
+				Type:   baseData.Type,
+				Name:   baseData.Name,
+				Attrs:  baseData.Attrs,
+				Blocks: baseData.Blocks,
+			}
+			envResource := &types.EnvResource{
+				Type:   envData.Type,
+				Name:   envData.Name,
+				Attrs:  envData.Attrs,
+				Blocks: envData.Blocks,
+			}
+			blockDiffs := d.compareDataSourceBlocks(baseResource, envResource, baseEnv, env)
+			results = append(results, blockDiffs...)
 		}
 	}
 
@@ -880,6 +897,118 @@ func (d *HCLDiffer) compareDataSourceAttributes(baseData, envData *types.EnvData
 				Expected:    baseValue,
 				Actual:      value,
 				IsIgnored:   d.ignoreMatcher.IsIgnored(resourcePath),
+			}
+			results = append(results, diff)
+		}
+	}
+
+	return results
+}
+
+// compareDataSourceBlocks はデータソースのネストブロック間の差分を比較
+func (d *HCLDiffer) compareDataSourceBlocks(baseResource, resource *types.EnvResource, baseEnv, env string) []*types.DiffResult {
+	var results []*types.DiffResult
+
+	// 全ブロック型を収集
+	allBlockTypes := make(map[string]bool)
+	for blockType := range baseResource.Blocks {
+		allBlockTypes[blockType] = true
+	}
+	for blockType := range resource.Blocks {
+		allBlockTypes[blockType] = true
+	}
+
+	// 各ブロック型を比較
+	for blockType := range allBlockTypes {
+		baseBlocks := baseResource.Blocks[blockType]
+		blocks := resource.Blocks[blockType]
+
+		// ブロック数の差分をチェック
+		maxLen := len(baseBlocks)
+		if len(blocks) > maxLen {
+			maxLen = len(blocks)
+		}
+
+		for i := 0; i < maxLen; i++ {
+			var baseBlock, block *types.EnvBlock
+
+			if i < len(baseBlocks) {
+				baseBlock = baseBlocks[i]
+			}
+			if i < len(blocks) {
+				block = blocks[i]
+			}
+
+			// ブロック存在差分をチェック
+			if baseBlock == nil && block != nil {
+				// 新しいブロックが追加された
+				resourcePath := fmt.Sprintf("data.%s.%s.%s[%d]", baseResource.Type, baseResource.Name, blockType, i)
+				diff := &types.DiffResult{
+					Resource:    fmt.Sprintf("data.%s.%s", baseResource.Type, baseResource.Name),
+					Environment: env,
+					Path:        fmt.Sprintf("%s[%d]", blockType, i),
+					Expected:    cty.NullVal(cty.DynamicPseudoType),
+					Actual:      d.formatBlockContent(block),
+					IsIgnored:   d.ignoreMatcher.IsIgnoredWithBlock(resourcePath, block, blockType),
+				}
+				results = append(results, diff)
+			} else if baseBlock != nil && block == nil {
+				// ブロックが削除された
+				resourcePath := fmt.Sprintf("data.%s.%s.%s[%d]", baseResource.Type, baseResource.Name, blockType, i)
+				diff := &types.DiffResult{
+					Resource:    fmt.Sprintf("data.%s.%s", baseResource.Type, baseResource.Name),
+					Environment: env,
+					Path:        fmt.Sprintf("%s[%d]", blockType, i),
+					Expected:    d.formatBlockContent(baseBlock),
+					Actual:      cty.NullVal(cty.DynamicPseudoType),
+					IsIgnored:   d.ignoreMatcher.IsIgnoredWithBlock(resourcePath, baseBlock, blockType),
+				}
+				results = append(results, diff)
+			} else if baseBlock != nil && block != nil {
+				// ブロック内属性を比較
+				blockDiffs := d.compareDataSourceBlockAttributes(baseResource, baseBlock, block, blockType, i, env)
+				results = append(results, blockDiffs...)
+			}
+		}
+	}
+
+	return results
+}
+
+// compareDataSourceBlockAttributes はデータソースのブロック内属性を比較
+func (d *HCLDiffer) compareDataSourceBlockAttributes(resource *types.EnvResource, baseBlock, block *types.EnvBlock, blockType string, index int, env string) []*types.DiffResult {
+	var results []*types.DiffResult
+
+	// 全属性名を収集
+	allAttrNames := make(map[string]bool)
+	for name := range baseBlock.Attrs {
+		allAttrNames[name] = true
+	}
+	for name := range block.Attrs {
+		allAttrNames[name] = true
+	}
+
+	// 各属性を比較
+	for attrName := range allAttrNames {
+		baseValue, baseExists := baseBlock.Attrs[attrName]
+		value, exists := block.Attrs[attrName]
+
+		if !baseExists {
+			baseValue = cty.NullVal(cty.DynamicPseudoType)
+		}
+		if !exists {
+			value = cty.NullVal(cty.DynamicPseudoType)
+		}
+
+		if !baseValue.Equals(value).True() {
+			resourcePath := fmt.Sprintf("data.%s.%s.%s[%d].%s", resource.Type, resource.Name, blockType, index, attrName)
+			diff := &types.DiffResult{
+				Resource:    fmt.Sprintf("data.%s.%s", resource.Type, resource.Name),
+				Environment: env,
+				Path:        fmt.Sprintf("%s[%d].%s", blockType, index, attrName),
+				Expected:    baseValue,
+				Actual:      value,
+				IsIgnored:   d.ignoreMatcher.IsIgnoredWithBlockAttribute(resourcePath, block, blockType),
 			}
 			results = append(results, diff)
 		}
