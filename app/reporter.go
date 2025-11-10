@@ -4,6 +4,8 @@ import (
 	"sort"
 	"strings"
 
+	"github.com/olekukonko/tablewriter"
+	"github.com/olekukonko/tablewriter/renderer"
 	"github.com/zclconf/go-cty/cty"
 )
 
@@ -153,10 +155,7 @@ func (r *ResultReporter) generateMarkdownTables(driftTable, ignoredTable []Table
 	// 意図されていない差分テーブル
 	if len(driftTable) > 0 {
 		md.WriteString("## 🚨 意図されていない差分\n\n")
-		r.writeTableHeader(&md, envNames, false)
-		for _, row := range driftTable {
-			r.writeTableRow(&md, row, envNames, false)
-		}
+		md.WriteString(r.buildMarkdownTable(driftTable, envNames, false))
 		md.WriteString("\n")
 	} else {
 		md.WriteString("## ✅ 意図されていない差分\n\n")
@@ -166,63 +165,62 @@ func (r *ResultReporter) generateMarkdownTables(driftTable, ignoredTable []Table
 	// 無視された差分テーブル
 	if len(ignoredTable) > 0 {
 		md.WriteString("## 📝 無視された差分（意図的）\n\n")
-		r.writeTableHeader(&md, envNames, true)
-		for _, row := range ignoredTable {
-			r.writeTableRow(&md, row, envNames, true)
-		}
+		md.WriteString(r.buildMarkdownTable(ignoredTable, envNames, true))
 		md.WriteString("\n")
 	}
 
 	return md.String()
 }
 
-// writeTableHeader はテーブルヘッダーを書き込む
-func (r *ResultReporter) writeTableHeader(md *strings.Builder, envNames []string, includeComment bool) {
-	md.WriteString("| 該当箇所 |")
-	for _, env := range envNames {
-		md.WriteString(" " + env + " |")
-	}
+// buildMarkdownTable はtablewriterを使用してMarkdownテーブルを生成する
+func (r *ResultReporter) buildMarkdownTable(rows []TableRow, envNames []string, includeComment bool) string {
+	var buffer strings.Builder
+	table := tablewriter.NewTable(&buffer,
+		tablewriter.WithRenderer(renderer.NewMarkdown()),
+	)
+
+	// ヘッダー作成
+	headers := []string{"該当箇所"}
+	headers = append(headers, envNames...)
 	if includeComment {
-		md.WriteString(" 理由 |")
+		headers = append(headers, "理由")
 	}
-	md.WriteString("\n")
+	table.Header(headers)
 
-	md.WriteString("|----------|")
-	for range envNames {
-		md.WriteString("-------|")
-	}
-	if includeComment {
-		md.WriteString("------|")
-	}
-	md.WriteString("\n")
-}
-
-// writeTableRow はテーブル行を書き込む
-func (r *ResultReporter) writeTableRow(md *strings.Builder, row TableRow, envNames []string, includeComment bool) {
-	fullPath := row.Resource
-	if row.Path != "" {
-		fullPath += "." + row.Path
-	}
-	md.WriteString("| " + fullPath + " |")
-
-	for _, env := range envNames {
-		value := row.Values[env]
-		if value == "" {
-			value = "-"
+	// 各行のデータ作成
+	data := make([][]any, 0, len(rows))
+	for _, row := range rows {
+		fullPath := row.Resource
+		if row.Path != "" {
+			fullPath += "." + row.Path
 		}
-		// 無視されたリソース存在差分で false の場合は "-" に置換
-		if includeComment && row.Path == "" && value == "false" {
-			value = "-"
+
+		rowData := []any{fullPath}
+		for _, env := range envNames {
+			value := row.Values[env]
+			if value == "" {
+				value = "-"
+			}
+			// 無視されたリソース存在差分で false の場合は "-" に置換
+			if includeComment && row.Path == "" && value == "false" {
+				value = "-"
+			}
+			rowData = append(rowData, value)
 		}
-		md.WriteString(" " + value + " |")
+
+		if includeComment {
+			comment := row.Comment
+			if comment == "" {
+				comment = "-"
+			}
+			rowData = append(rowData, comment)
+		}
+
+		data = append(data, rowData)
 	}
 
-	if includeComment {
-		comment := row.Comment
-		if comment == "" {
-			comment = "-"
-		}
-		md.WriteString(" " + comment + " |")
-	}
-	md.WriteString("\n")
+	table.Bulk(data)
+	table.Render()
+
+	return buffer.String()
 }
