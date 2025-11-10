@@ -18,6 +18,29 @@ locals {
   # Boolean locals のテスト（env1と異なる値）
   enable_monitoring = false  # env1はtrue
   enable_backup = true       # env1はfalse
+
+  # Object locals のテスト（env1と異なる値）
+  database_config = {
+    engine         = "postgresql"  # 異なるengine
+    engine_version = "14.0"        # 異なるversion
+    multi_az       = false         # 異なるboolean
+    backup_retention_period = 30   # 異なる数値
+    storage_encrypted = true       # 追加プロパティ
+  }
+
+  # List locals のテスト（env1と異なる値）
+  allowed_cidr_blocks = [
+    "10.0.0.0/8",
+    "172.16.0.0/12",
+    "192.168.0.0/16"  # 追加要素
+  ]
+
+  # env2のみに存在するオブジェクト
+  prod_only_config = {
+    ssl_enabled      = true
+    monitoring_level = "production"
+    alert_endpoints  = ["ops@example.com"]
+  }
 }
 
 # Variable記述のテスト（追加属性）

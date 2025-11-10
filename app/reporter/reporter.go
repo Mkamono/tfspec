@@ -44,13 +44,46 @@ func (r *ResultReporter) buildTables(diffs []*types.DiffResult, envNames []strin
 		}
 
 		row := r.getOrCreateRow(targetMap, key, diff.Resource, diff.Path)
-		row.Values[diff.Environment] = r.formatter.FormatValue(diff.Actual)
+
+		// local存在差分の場合は実際の値を取得
+		if diff.Path == "" && strings.HasPrefix(diff.Resource, "local.") {
+			// 実際のlocal値を環境リソースから取得
+			if envResource, exists := envResources[diff.Environment]; exists {
+				localName := strings.TrimPrefix(diff.Resource, "local.")
+				for _, local := range envResource.Locals {
+					if local.Name == localName {
+						row.Values[diff.Environment] = r.formatter.FormatValue(local.Value)
+						goto skipActual
+					}
+				}
+			}
+			// 存在しない場合は"-"として表示
+			row.Values[diff.Environment] = "-"
+		skipActual:
+		} else {
+			row.Values[diff.Environment] = r.formatter.FormatValue(diff.Actual)
+		}
 
 		// 期待値があればベース環境の値として設定
 		if !diff.Expected.IsNull() {
 			baseEnv := envNames[0]
 			if _, exists := row.Values[baseEnv]; !exists {
-				row.Values[baseEnv] = r.formatter.FormatValue(diff.Expected)
+				// local存在差分の場合は実際の値を取得
+				if diff.Path == "" && strings.HasPrefix(diff.Resource, "local.") {
+					if envResource, exists := envResources[baseEnv]; exists {
+						localName := strings.TrimPrefix(diff.Resource, "local.")
+						for _, local := range envResource.Locals {
+							if local.Name == localName {
+								row.Values[baseEnv] = r.formatter.FormatValue(local.Value)
+								goto skipExpected
+							}
+						}
+					}
+					row.Values[baseEnv] = "-"
+				skipExpected:
+				} else {
+					row.Values[baseEnv] = r.formatter.FormatValue(diff.Expected)
+				}
 			}
 		}
 	}
@@ -132,7 +165,7 @@ func (r *ResultReporter) findResource(envResources *types.EnvResources, resource
 // getResourceValue はリソースから指定パスの値を取得する
 func (r *ResultReporter) getResourceValue(resource *types.EnvResource, path string) cty.Value {
 	if path == "" {
-		// リソース存在差分の場合
+		// リソース存在差分の場合（真のリソース存在差分のみ）
 		if resource != nil {
 			return cty.BoolVal(true)
 		}

@@ -18,6 +18,26 @@ locals {
   # Boolean locals のテスト
   enable_monitoring = true
   enable_backup = false
+
+  # Object locals のテスト
+  database_config = {
+    engine         = "mysql"
+    engine_version = "8.0"
+    multi_az       = true
+    backup_retention_period = 7
+  }
+
+  # List locals のテスト
+  allowed_cidr_blocks = [
+    "10.0.0.0/8",
+    "172.16.0.0/12"
+  ]
+
+  # env1のみに存在するオブジェクト
+  dev_only_config = {
+    debug_mode = true
+    log_level  = "debug"
+  }
 }
 
 # Variable記述のテスト
