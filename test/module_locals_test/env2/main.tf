@@ -14,6 +14,10 @@ locals {
   }
 
   vpc_cidr = "10.1.0.0/16" # 異なるCIDR
+
+  # Boolean locals のテスト（env1と異なる値）
+  enable_monitoring = false  # env1はtrue
+  enable_backup = true       # env1はfalse
 }
 
 # Variable記述のテスト（追加属性）

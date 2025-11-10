@@ -215,8 +215,8 @@ func (r *ResultReporter) buildMarkdownTable(rows []types.TableRow, envNames []st
 		for _, env := range envNames {
 			value := row.Values[env]
 
-			// リソース存在差分の場合、boolean値をアイコンに変換
-			if row.Path == "" {
+			// リソース存在差分の場合のみ、boolean値をアイコンに変換
+			if row.Path == "" && isResourceExistenceDiff(row.Resource, value) {
 				// 空文字列の場合は「存在しない」として扱う
 				if value == "" {
 					value = "false"
@@ -252,4 +252,16 @@ func (r *ResultReporter) buildMarkdownTable(rows []types.TableRow, envNames []st
 	table.Render()
 
 	return buffer.String()
+}
+
+// isResourceExistenceDiff はリソース存在差分かどうかを判定する
+// リソース存在差分は、リソースの存在自体が差分として検出される場合
+func isResourceExistenceDiff(resource, value string) bool {
+	// boolean値（true/false）で、かつリソース名が適切な形式の場合のみリソース存在差分として扱う
+	// local.*, var.*, output.* のような設定値は除外
+	return (value == "true" || value == "false" || value == "") &&
+		   strings.Contains(resource, ".") &&
+		   !strings.HasPrefix(resource, "local.") &&
+		   !strings.HasPrefix(resource, "var.") &&
+		   !strings.HasPrefix(resource, "output.")
 }

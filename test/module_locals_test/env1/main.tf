@@ -14,6 +14,10 @@ locals {
   }
 
   vpc_cidr = "10.0.0.0/16"
+
+  # Boolean locals のテスト
+  enable_monitoring = true
+  enable_backup = false
 }
 
 # Variable記述のテスト
