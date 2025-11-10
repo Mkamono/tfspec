@@ -4,5 +4,5 @@
 
 |     該当箇所     | ENV 1 | ENV 2 | ENV 3 |
 |:----------------:|:-----:|:-----:|:-----:|
-| aws_instance.web | false |   -   | true  |
+| aws_instance.web |  ❌   |  ❌   |  ✅   |
 

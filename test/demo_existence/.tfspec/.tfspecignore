@@ -1,2 +1,5 @@
-# Demo resource existence differences
+# 監視設定の環境別要件による意図的差分
+aws_cloudwatch_metric_alarm.high_cpu
+
+# デモインスタンスの環境別配置要件
 aws_instance.demo

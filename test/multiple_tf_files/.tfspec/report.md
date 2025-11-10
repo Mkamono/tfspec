@@ -9,7 +9,7 @@
 | aws_rds_instance.main.allocated_storage |     20      |    100     |
 |   aws_rds_instance.main.storage_type    |     gp2     |    gp3     |
 | aws_rds_instance.main.tags.Environment  | development | production |
-|           aws_subnet.private            |    false    |    true    |
+|           aws_subnet.private            |     ❌      |     ✅     |
 |      aws_vpc.main.tags.Environment      | development | production |
 
 ## 📝 無視された差分（意図的）

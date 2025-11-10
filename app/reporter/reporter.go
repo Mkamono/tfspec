@@ -214,13 +214,26 @@ func (r *ResultReporter) buildMarkdownTable(rows []types.TableRow, envNames []st
 		rowData := []any{fullPath}
 		for _, env := range envNames {
 			value := row.Values[env]
-			if value == "" {
-				value = "-"
+
+			// リソース存在差分の場合、boolean値をアイコンに変換
+			if row.Path == "" {
+				// 空文字列の場合は「存在しない」として扱う
+				if value == "" {
+					value = "false"
+				}
+				switch value {
+				case "true":
+					value = "✅"
+				case "false":
+					value = "❌"
+				}
+			} else {
+				// 通常の属性差分の場合は空文字列を"-"に変換
+				if value == "" {
+					value = "-"
+				}
 			}
-			// 無視されたリソース存在差分で false の場合は "-" に置換
-			if includeComment && row.Path == "" && value == "false" {
-				value = "-"
-			}
+
 			rowData = append(rowData, value)
 		}
 

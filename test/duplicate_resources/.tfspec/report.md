@@ -5,7 +5,7 @@
 |          該当箇所           | ENV 1 | ENV 2 | ENV 3 |
 |:---------------------------:|:-----:|:-----:|:-----:|
 | aws_instance.web.tags.Owner | team1 | team3 | team1 |
-|   aws_instance.web_backup   | false |   -   | true  |
+|   aws_instance.web_backup   |  ❌   |  ❌   |  ✅   |
 
 ## 📝 無視された差分（意図的）
 
