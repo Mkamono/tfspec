@@ -23,7 +23,7 @@ func NewResultReporter() *ResultReporter {
 // GenerateMarkdown は差分結果をMarkdownテーブル形式で出力する
 func (r *ResultReporter) GenerateMarkdown(diffs []*DiffResult, envNames []string, ruleComments map[string]string, envResources map[string]*EnvResources) string {
 	driftTable, ignoredTable := r.buildTables(diffs, envNames, ruleComments, envResources)
-	return r.generateMarkdownTables(driftTable, ignoredTable, envNames)
+	return r.generateMarkdownReport(driftTable, ignoredTable, envNames)
 }
 
 // buildTables は差分データをテーブル形式に変換する
@@ -31,10 +31,9 @@ func (r *ResultReporter) buildTables(diffs []*DiffResult, envNames []string, rul
 	driftRows := make(map[string]*TableRow)
 	ignoredRows := make(map[string]*TableRow)
 
+	// DiffResultをTableRowに変換
 	for _, diff := range diffs {
-		fullPath := diff.Resource + "." + diff.Path
-		key := fullPath
-
+		key := diff.Resource + "." + diff.Path
 		var targetMap map[string]*TableRow
 		if diff.IsIgnored {
 			targetMap = ignoredRows
@@ -42,28 +41,10 @@ func (r *ResultReporter) buildTables(diffs []*DiffResult, envNames []string, rul
 			targetMap = driftRows
 		}
 
-		row, exists := targetMap[key]
-		if !exists {
-			row = &TableRow{
-				Resource: diff.Resource,
-				Path:     diff.Path,
-				Values:   make(map[string]string),
-				Comment:  "",
-			}
-			targetMap[key] = row
-
-			if diff.IsIgnored {
-				for rule, comment := range ruleComments {
-					if strings.Contains(rule, diff.Resource) && strings.Contains(rule, diff.Path) {
-						row.Comment = comment
-						break
-					}
-				}
-			}
-		}
-
+		row := r.getOrCreateRow(targetMap, key, diff.Resource, diff.Path)
 		row.Values[diff.Environment] = r.formatter.FormatValue(diff.Actual)
 
+		// 期待値があればベース環境の値として設定
 		if !diff.Expected.IsNull() {
 			baseEnv := envNames[0]
 			if _, exists := row.Values[baseEnv]; !exists {
@@ -72,25 +53,42 @@ func (r *ResultReporter) buildTables(diffs []*DiffResult, envNames []string, rul
 		}
 	}
 
+	// コメントを付与（無視された項目のみ）
+	r.enrichWithComments(ignoredRows, ruleComments)
+
+	// 欠損値を補填
 	r.fillMissingValues(driftRows, envNames, envResources)
 	r.fillMissingValues(ignoredRows, envNames, envResources)
 
-	var driftTable, ignoredTable []TableRow
-	for _, row := range driftRows {
-		driftTable = append(driftTable, *row)
-	}
-	for _, row := range ignoredRows {
-		ignoredTable = append(ignoredTable, *row)
+	return r.mapToSortedSlice(driftRows), r.mapToSortedSlice(ignoredRows)
+}
+
+// getOrCreateRow は既存の行を取得するか新しい行を作成する
+func (r *ResultReporter) getOrCreateRow(targetMap map[string]*TableRow, key, resource, path string) *TableRow {
+	if row, exists := targetMap[key]; exists {
+		return row
 	}
 
-	sort.Slice(driftTable, func(i, j int) bool {
-		return driftTable[i].Resource+"."+driftTable[i].Path < driftTable[j].Resource+"."+driftTable[j].Path
-	})
-	sort.Slice(ignoredTable, func(i, j int) bool {
-		return ignoredTable[i].Resource+"."+ignoredTable[i].Path < ignoredTable[j].Resource+"."+ignoredTable[j].Path
-	})
+	row := &TableRow{
+		Resource: resource,
+		Path:     path,
+		Values:   make(map[string]string),
+		Comment:  "",
+	}
+	targetMap[key] = row
+	return row
+}
 
-	return driftTable, ignoredTable
+// enrichWithComments は無視されたルールにコメントを付与する
+func (r *ResultReporter) enrichWithComments(rows map[string]*TableRow, ruleComments map[string]string) {
+	for _, row := range rows {
+		for rule, comment := range ruleComments {
+			if strings.Contains(rule, row.Resource) && strings.Contains(rule, row.Path) {
+				row.Comment = comment
+				break
+			}
+		}
+	}
 }
 
 // fillMissingValues は欠損している環境の値を補填する
@@ -132,7 +130,7 @@ func (r *ResultReporter) findResource(envResources *EnvResources, resourceName s
 // getResourceValue はリソースから指定パスの値を取得する
 func (r *ResultReporter) getResourceValue(resource *EnvResource, path string) cty.Value {
 	if path == "" {
-		// リソース存在差分の場合：リソースが存在するかどうかを返す
+		// リソース存在差分の場合
 		if resource != nil {
 			return cty.BoolVal(true)
 		}
@@ -146,8 +144,24 @@ func (r *ResultReporter) getResourceValue(resource *EnvResource, path string) ct
 	return cty.NullVal(cty.String)
 }
 
-// generateMarkdownTables はMarkdownテーブルを生成する
-func (r *ResultReporter) generateMarkdownTables(driftTable, ignoredTable []TableRow, envNames []string) string {
+// mapToSortedSlice はマップをソート済みスライスに変換する
+func (r *ResultReporter) mapToSortedSlice(rows map[string]*TableRow) []TableRow {
+	result := make([]TableRow, 0, len(rows))
+	for _, row := range rows {
+		result = append(result, *row)
+	}
+
+	sort.Slice(result, func(i, j int) bool {
+		keyA := result[i].Resource + "." + result[i].Path
+		keyB := result[j].Resource + "." + result[j].Path
+		return keyA < keyB
+	})
+
+	return result
+}
+
+// generateMarkdownReport はMarkdownレポート全体を生成する
+func (r *ResultReporter) generateMarkdownReport(driftTable, ignoredTable []TableRow, envNames []string) string {
 	var md strings.Builder
 
 	md.WriteString("# Tfspec Check Results\n\n")
@@ -179,7 +193,7 @@ func (r *ResultReporter) buildMarkdownTable(rows []TableRow, envNames []string, 
 		tablewriter.WithRenderer(renderer.NewMarkdown()),
 	)
 
-	// ヘッダー作成
+	// ヘッダー設定
 	headers := []string{"該当箇所"}
 	headers = append(headers, envNames...)
 	if includeComment {
@@ -187,7 +201,7 @@ func (r *ResultReporter) buildMarkdownTable(rows []TableRow, envNames []string, 
 	}
 	table.Header(headers)
 
-	// 各行のデータ作成
+	// データ構築
 	data := make([][]any, 0, len(rows))
 	for _, row := range rows {
 		fullPath := row.Resource
