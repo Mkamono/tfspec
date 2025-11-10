@@ -42,6 +42,7 @@ func (s *ConfigService) LoadConfig(envDirs []string, verbose, noFail bool) (*Con
 }
 
 // setupTfspecDir は.tfspecディレクトリの存在を確認し、パスを返す
+// ディレクトリが存在しない場合は空文字を返す（ignoreルールなしで動作）
 func (s *ConfigService) setupTfspecDir() (string, error) {
 	cwd, err := os.Getwd()
 	if err != nil {
@@ -50,8 +51,8 @@ func (s *ConfigService) setupTfspecDir() (string, error) {
 
 	tfspecDir := filepath.Join(cwd, ".tfspec")
 	if _, err := os.Stat(tfspecDir); os.IsNotExist(err) {
-		return "", fmt.Errorf(".tfspecディレクトリが見つかりません。パス: %s\n"+
-			"ヒント: プロジェクトルートで '.tfspec' ディレクトリを作成してください", tfspecDir)
+		// .tfspecディレクトリが存在しない場合は空文字を返す（ignoreルールなし）
+		return "", nil
 	}
 
 	return tfspecDir, nil
@@ -73,7 +74,7 @@ func (s *ConfigService) resolveEnvDirs(envDirs []string) ([]string, error) {
 
 	if len(envDirs) == 0 {
 		return nil, fmt.Errorf("環境ディレクトリが見つかりませんでした\n" +
-			"ヒント: main.hclファイルを含むディレクトリを作成するか、コマンドライン引数で環境ディレクトリを指定してください")
+			"ヒント: main.hcl または main.tf ファイルを含むディレクトリを作成するか、コマンドライン引数で環境ディレクトリを指定してください")
 	}
 
 	fmt.Printf("対象環境: %v\n", envDirs)
@@ -95,9 +96,13 @@ func (s *ConfigService) detectEnvDirs(baseDir string) ([]string, error) {
 		}
 
 		envPath := filepath.Join(baseDir, entry.Name())
-		mainFile := filepath.Join(envPath, "main.hcl")
+		hclFile := filepath.Join(envPath, "main.hcl")
+		tfFile := filepath.Join(envPath, "main.tf")
 
-		if _, err := os.Stat(mainFile); err == nil {
+		// main.hcl または main.tf が存在すれば環境ディレクトリとして認識
+		if _, err := os.Stat(hclFile); err == nil {
+			envDirs = append(envDirs, envPath)
+		} else if _, err := os.Stat(tfFile); err == nil {
 			envDirs = append(envDirs, envPath)
 		}
 	}

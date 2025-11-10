@@ -19,7 +19,7 @@ tfspecは、Terraformの環境間構成差分を自動検出し、「意図的�
 
 # アーキテクチャ
 ## 動作フロー
-1. **差分検出**: 全環境のTerraformファイル（main.hcl）を解析・比較
+1. **差分検出**: 全環境のTerraformファイル（.tf/.hclファイル）を解析・比較
 2. **フィルタリング**: `.tfspecignore`に記述されたリソース・属性は「意図的な差分」として除外
 3. **レポート**: 残った差分のみを「構成ドリフト」として報告
 
@@ -54,6 +54,7 @@ tfspec/
     ├── list_diff/               # リスト差分
     ├── multiple_attribute_diff/ # 複数属性差分
     ├── multiple_spec_files/     # 複数仕様書ファイル
+    ├── multiple_tf_files/       # 複数.tf/.hclファイル読み込み
     ├── nested_block_diff/       # ネストブロック差分
     ├── partial_existence_diff/  # 部分存在差分
     ├── resource_existence_diff/ # リソース存在差分
@@ -142,6 +143,28 @@ aws_instance.web.instance_type
 aws_rds_instance.main.db_instance_class
 ```
 
+## 複数ファイル読み込みの例（multiple_tf_files）
+各環境ディレクトリ内の全ての.tf/.hclファイルを自動検出・読み込み：
+```
+test/multiple_tf_files/
+├── .tfspec/
+│   └── .tfspecignore     # 意図的な差分を宣言
+├── env1/
+│   ├── compute.tf        # EC2インスタンス定義
+│   ├── database.tf       # RDSインスタンス定義
+│   └── network.hcl       # VPC、サブネット定義
+└── env2/
+    ├── compute.tf        # EC2インスタンス定義
+    ├── database.tf       # RDSインスタンス定義
+    └── network.hcl       # VPC、サブネット定義（+ 追加リソース）
+```
+
+**ファイル読み込み仕様：**
+- 環境ディレクトリ内の全.tf/.hclファイルを自動検出
+- ファイルを順次解析してリソースを結合
+- `main.hcl`/`main.tf`がない環境でも動作
+- ファイル順序は安定化（ソート済み）
+
 # アーキテクチャ詳細
 
 ## 主要コンポーネント
@@ -158,7 +181,7 @@ aws_rds_instance.main.db_instance_class
 - リソース存在差分、属性差分、ブロック差分の検出
 
 ### parser.go
-- HCLファイルの解析
+- HCLファイルの解析（単一ファイル・複数ファイル対応）
 - .tfspecignoreファイルの読み込み
 - 単一ファイル・分割ファイル両方に対応
 

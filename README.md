@@ -81,7 +81,7 @@ aws_rds_instance.main.db_instance_class
 
 ### 動作フロー
 
-1. **差分検出**: 全環境のTerraformファイル（main.hcl）を解析・比較
+1. **差分検出**: 全環境のTerraformファイル（.tf/.hclファイル）を解析・比較
 2. **フィルタリング**: `.tfspecignore`に記述されたリソース・属性は「意図的な差分」として除外
 3. **レポート**: 残った差分のみを「構成ドリフト」として報告
 
@@ -124,9 +124,22 @@ your-terraform-project/
 │   ├── .tfspecignore     # 意図的な差分の宣言
 │   └── report.md         # 生成される差分レポート
 ├── env1/
-│   └── main.hcl
+│   ├── main.tf           # または複数の.tf/.hclファイル
+│   ├── compute.tf        # （全ての.tf/.hclファイルを自動検出）
+│   └── network.hcl
 ├── env2/
-│   └── main.hcl
+│   ├── main.tf
+│   ├── compute.tf
+│   └── network.hcl
 └── env3/
-    └── main.hcl
+    ├── main.tf
+    ├── compute.tf
+    └── network.hcl
 ```
+
+## ファイル読み込み仕様
+
+- **自動検出**: 環境ディレクトリ内の全ての.tf/.hclファイルを自動検出
+- **ファイル結合**: 複数ファイルのリソースを結合して解析
+- **柔軟性**: `main.hcl`/`main.tf`がない環境でも動作
+- **後方互換性**: 従来の単一ファイル構成も引き続きサポート

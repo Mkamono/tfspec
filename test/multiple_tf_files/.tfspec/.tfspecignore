@@ -1,0 +1,6 @@
+# 複数ファイル読み込みテスト用の無視ルール
+# dev環境はt3.smallだが本番はt3.medium（意図的差分）
+aws_instance.web.instance_type
+
+# 環境別データベース設定（意図的差分）
+aws_rds_instance.main.db_instance_class

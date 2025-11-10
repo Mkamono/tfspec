@@ -78,7 +78,11 @@ func (s *AnalyzerService) loadIgnoreRules(tfspecDir string) ([]string, map[strin
 		return nil, nil, fmt.Errorf(".tfspecignoreのコメント情報の読み込みに失敗しました: %w", err)
 	}
 
-	fmt.Printf("無視ルールを読み込みました: %d件\n", len(ignoreRules))
+	if tfspecDir == "" {
+		fmt.Printf("無視ルールを読み込みました: 0件 (.tfspecディレクトリなし)\n")
+	} else {
+		fmt.Printf("無視ルールを読み込みました: %d件\n", len(ignoreRules))
+	}
 	return ignoreRules, ruleComments, nil
 }
 
@@ -89,17 +93,24 @@ func (s *AnalyzerService) parseEnvironments(envDirs []string) (map[string]*types
 
 	for _, envDir := range envDirs {
 		envName := filepath.Base(envDir)
-		envFile := filepath.Join(envDir, "main.hcl")
 
-		if _, err := os.Stat(envFile); os.IsNotExist(err) {
-			skippedFiles = append(skippedFiles, envFile)
+		// 環境ディレクトリ内の全ての.tf/.hclファイルを探す
+		terraformFiles, err := s.findTerraformFiles(envDir)
+		if err != nil {
+			return nil, fmt.Errorf("Terraformファイルの検索に失敗しました: %w", err)
+		}
+
+		if len(terraformFiles) == 0 {
+			hclFile := filepath.Join(envDir, "main.hcl")
+			tfFile := filepath.Join(envDir, "main.tf")
+			skippedFiles = append(skippedFiles, hclFile+" または "+tfFile+" (または他の.tf/.hclファイル)")
 			continue
 		}
 
-		envResource, err := s.parser.ParseEnvFile(envFile)
+		envResource, err := s.parser.ParseMultipleFiles(terraformFiles)
 		if err != nil {
-			return nil, fmt.Errorf("環境ファイルの解析に失敗しました:\n  ファイル: %s\n  エラー: %w\n"+
-				"ヒント: HCL構文を確認してください", envFile, err)
+			return nil, fmt.Errorf("環境ファイルの解析に失敗しました:\n  ファイル: %v\n  エラー: %w\n"+
+				"ヒント: HCL構文を確認してください", terraformFiles, err)
 		}
 
 		envResources[envName] = envResource
@@ -111,7 +122,7 @@ func (s *AnalyzerService) parseEnvironments(envDirs []string) (map[string]*types
 
 	if len(envResources) == 0 {
 		return nil, fmt.Errorf("解析可能な環境ファイルが見つかりませんでした\n" +
-			"ヒント: 各環境ディレクトリに main.hcl ファイルを作成してください")
+			"ヒント: 各環境ディレクトリに main.hcl または main.tf ファイルを作成してください")
 	}
 
 	return envResources, nil
@@ -126,6 +137,31 @@ func (s *AnalyzerService) displayIgnoreWarnings() {
 	if len(warnings) > 0 {
 		fmt.Println()
 	}
+}
+
+// findTerraformFiles は指定ディレクトリ内の全ての.tf/.hclファイルを検索する
+func (s *AnalyzerService) findTerraformFiles(dir string) ([]string, error) {
+	var terraformFiles []string
+
+	entries, err := os.ReadDir(dir)
+	if err != nil {
+		return nil, fmt.Errorf("ディレクトリの読み取りに失敗しました: %w", err)
+	}
+
+	for _, entry := range entries {
+		if entry.IsDir() {
+			continue
+		}
+
+		fileName := entry.Name()
+		if filepath.Ext(fileName) == ".tf" || filepath.Ext(fileName) == ".hcl" {
+			fullPath := filepath.Join(dir, fileName)
+			terraformFiles = append(terraformFiles, fullPath)
+		}
+	}
+
+	sort.Strings(terraformFiles) // ファイル順序を一定にする
+	return terraformFiles, nil
 }
 
 // extractEnvNames は環境名リストを抽出してソートする

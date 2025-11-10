@@ -21,6 +21,22 @@ func NewHCLParser() *HCLParser {
 	}
 }
 
+// ParseMultipleFiles は複数の.tf/.hclファイルを結合して解析する
+func (p *HCLParser) ParseMultipleFiles(filenames []string) (*types.EnvResources, error) {
+	var allResources []*types.EnvResource
+
+	// 各ファイルを順番に解析して結合
+	for _, filename := range filenames {
+		envResources, err := p.ParseEnvFile(filename)
+		if err != nil {
+			return nil, err
+		}
+		allResources = append(allResources, envResources.Resources...)
+	}
+
+	return &types.EnvResources{Resources: allResources}, nil
+}
+
 // 標準的なTerraform HCLファイル解析（カスタム関数なし）
 func (p *HCLParser) ParseEnvFile(filename string) (*types.EnvResources, error) {
 	file, diags := p.parser.ParseHCLFile(filename)
@@ -129,6 +145,11 @@ func (p *HCLParser) parseResourceContent(body hcl.Body, evalCtx *hcl.EvalContext
 
 // LoadIgnoreRules は.tfspecignoreファイルの読み込みを行う
 func LoadIgnoreRules(tfspecDir string) ([]string, error) {
+	// .tfspecディレクトリが存在しない場合は空のルールを返す
+	if tfspecDir == "" {
+		return []string{}, nil
+	}
+
 	var rules []string
 
 	// 単一ファイル形式をチェック
@@ -147,6 +168,11 @@ func LoadIgnoreRules(tfspecDir string) ([]string, error) {
 // コメント付きignoreルールを読み込み（rule -> comment のマップを返す）
 func LoadIgnoreRulesWithComments(tfspecDir string) (map[string]string, error) {
 	ruleComments := make(map[string]string)
+
+	// .tfspecディレクトリが存在しない場合は空のマップを返す
+	if tfspecDir == "" {
+		return ruleComments, nil
+	}
 
 	// 単一ファイル形式をチェック
 	ignoreFile := tfspecDir + "/.tfspecignore"
