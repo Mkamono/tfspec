@@ -74,7 +74,7 @@ func (s *ConfigService) resolveEnvDirs(envDirs []string) ([]string, error) {
 
 	if len(envDirs) == 0 {
 		return nil, fmt.Errorf("環境ディレクトリが見つかりませんでした\n" +
-			"ヒント: main.hcl または main.tf ファイルを含むディレクトリを作成するか、コマンドライン引数で環境ディレクトリを指定してください")
+			"ヒント: .tf または .hcl ファイルを含むディレクトリを作成するか、コマンドライン引数で環境ディレクトリを指定してください")
 	}
 
 	fmt.Printf("対象環境: %v\n", envDirs)
@@ -96,16 +96,34 @@ func (s *ConfigService) detectEnvDirs(baseDir string) ([]string, error) {
 		}
 
 		envPath := filepath.Join(baseDir, entry.Name())
-		hclFile := filepath.Join(envPath, "main.hcl")
-		tfFile := filepath.Join(envPath, "main.tf")
+		hasTerraformFiles, err := s.hasTerraformFiles(envPath)
+		if err != nil {
+			continue // ディレクトリの読み込みエラーは無視して次へ
+		}
 
-		// main.hcl または main.tf が存在すれば環境ディレクトリとして認識
-		if _, err := os.Stat(hclFile); err == nil {
-			envDirs = append(envDirs, envPath)
-		} else if _, err := os.Stat(tfFile); err == nil {
+		if hasTerraformFiles {
 			envDirs = append(envDirs, envPath)
 		}
 	}
 
 	return envDirs, nil
+}
+
+// hasTerraformFiles は指定ディレクトリに .tf または .hcl ファイルが存在するかチェックする
+func (s *ConfigService) hasTerraformFiles(dir string) (bool, error) {
+	entries, err := os.ReadDir(dir)
+	if err != nil {
+		return false, err
+	}
+
+	for _, entry := range entries {
+		if !entry.IsDir() {
+			name := entry.Name()
+			if filepath.Ext(name) == ".tf" || filepath.Ext(name) == ".hcl" {
+				return true, nil
+			}
+		}
+	}
+
+	return false, nil
 }
