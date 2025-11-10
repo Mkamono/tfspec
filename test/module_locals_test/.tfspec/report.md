@@ -15,6 +15,6 @@
 |     local.vpc_cidr     |            10.0.0.0/16            |            10.1.0.0/16             |                -                 |
 | module.vpc.environment |                dev                |                prod                | 環境別のmodule設定は意図的な差分 |
 |  module.vpc.vpc_cidr   |            10.0.0.0/16            |            10.1.0.0/16             |                -                 |
-|    output.vpc_cidr     |                ❌                 |               exists               |  本番環境では追加のoutputが必要  |
-| var.db_instance_class  |                ❌                 |               exists               | 本番環境では追加のvariableが必要 |
+|    output.vpc_cidr     |                ❌                 |                 ✅                 |  本番環境では追加のoutputが必要  |
+| var.db_instance_class  |                ❌                 |                 ✅                 | 本番環境では追加のvariableが必要 |
 

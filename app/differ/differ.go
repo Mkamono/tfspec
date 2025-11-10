@@ -442,8 +442,8 @@ func (d *HCLDiffer) compareModules(baseModules, envModules []*types.EnvModule, b
 				Resource:    fmt.Sprintf("module.%s", name),
 				Environment: env,
 				Path:        "",
-				Expected:    cty.StringVal("exists"),
-				Actual:      cty.NullVal(cty.DynamicPseudoType),
+				Expected:    cty.BoolVal(true),
+				Actual:      cty.BoolVal(false),
 				IsIgnored:   d.ignoreMatcher.IsIgnored(resourcePath),
 			}
 			results = append(results, diff)
@@ -457,8 +457,8 @@ func (d *HCLDiffer) compareModules(baseModules, envModules []*types.EnvModule, b
 				Resource:    fmt.Sprintf("module.%s", name),
 				Environment: env,
 				Path:        "",
-				Expected:    cty.NullVal(cty.DynamicPseudoType),
-				Actual:      cty.StringVal("exists"),
+				Expected:    cty.BoolVal(false),
+				Actual:      cty.BoolVal(true),
 				IsIgnored:   d.ignoreMatcher.IsIgnored(resourcePath),
 			}
 			results = append(results, diff)
@@ -542,8 +542,8 @@ func (d *HCLDiffer) compareLocals(baseLocals, envLocals []*types.EnvLocal, baseE
 				Resource:    fmt.Sprintf("local.%s", name),
 				Environment: env,
 				Path:        "",
-				Expected:    cty.StringVal("exists"),
-				Actual:      cty.NullVal(cty.DynamicPseudoType),
+				Expected:    cty.BoolVal(true),
+				Actual:      cty.BoolVal(false),
 				IsIgnored:   d.ignoreMatcher.IsIgnored(resourcePath),
 			}
 			results = append(results, diff)
@@ -557,8 +557,8 @@ func (d *HCLDiffer) compareLocals(baseLocals, envLocals []*types.EnvLocal, baseE
 				Resource:    fmt.Sprintf("local.%s", name),
 				Environment: env,
 				Path:        "",
-				Expected:    cty.NullVal(cty.DynamicPseudoType),
-				Actual:      cty.StringVal("exists"),
+				Expected:    cty.BoolVal(false),
+				Actual:      cty.BoolVal(true),
 				IsIgnored:   d.ignoreMatcher.IsIgnored(resourcePath),
 			}
 			results = append(results, diff)
@@ -610,8 +610,8 @@ func (d *HCLDiffer) compareVariables(baseVariables, envVariables []*types.EnvVar
 				Resource:    fmt.Sprintf("var.%s", name),
 				Environment: env,
 				Path:        "",
-				Expected:    cty.StringVal("exists"),
-				Actual:      cty.NullVal(cty.DynamicPseudoType),
+				Expected:    cty.BoolVal(true),
+				Actual:      cty.BoolVal(false),
 				IsIgnored:   d.ignoreMatcher.IsIgnored(resourcePath),
 			}
 			results = append(results, diff)
@@ -625,8 +625,8 @@ func (d *HCLDiffer) compareVariables(baseVariables, envVariables []*types.EnvVar
 				Resource:    fmt.Sprintf("var.%s", name),
 				Environment: env,
 				Path:        "",
-				Expected:    cty.NullVal(cty.DynamicPseudoType),
-				Actual:      cty.StringVal("exists"),
+				Expected:    cty.BoolVal(false),
+				Actual:      cty.BoolVal(true),
 				IsIgnored:   d.ignoreMatcher.IsIgnored(resourcePath),
 			}
 			results = append(results, diff)
@@ -710,8 +710,8 @@ func (d *HCLDiffer) compareOutputs(baseOutputs, envOutputs []*types.EnvOutput, b
 				Resource:    fmt.Sprintf("output.%s", name),
 				Environment: env,
 				Path:        "",
-				Expected:    cty.StringVal("exists"),
-				Actual:      cty.NullVal(cty.DynamicPseudoType),
+				Expected:    cty.BoolVal(true),
+				Actual:      cty.BoolVal(false),
 				IsIgnored:   d.ignoreMatcher.IsIgnored(resourcePath),
 			}
 			results = append(results, diff)
@@ -725,8 +725,8 @@ func (d *HCLDiffer) compareOutputs(baseOutputs, envOutputs []*types.EnvOutput, b
 				Resource:    fmt.Sprintf("output.%s", name),
 				Environment: env,
 				Path:        "",
-				Expected:    cty.NullVal(cty.DynamicPseudoType),
-				Actual:      cty.StringVal("exists"),
+				Expected:    cty.BoolVal(false),
+				Actual:      cty.BoolVal(true),
 				IsIgnored:   d.ignoreMatcher.IsIgnored(resourcePath),
 			}
 			results = append(results, diff)
@@ -812,8 +812,8 @@ func (d *HCLDiffer) compareDataSources(baseDataSources, envDataSources []*types.
 				Resource:    fmt.Sprintf("data.%s", key),
 				Environment: env,
 				Path:        "",
-				Expected:    cty.StringVal("exists"),
-				Actual:      cty.NullVal(cty.DynamicPseudoType),
+				Expected:    cty.BoolVal(true),
+				Actual:      cty.BoolVal(false),
 				IsIgnored:   d.ignoreMatcher.IsIgnored(resourcePath),
 			}
 			results = append(results, diff)
@@ -827,8 +827,8 @@ func (d *HCLDiffer) compareDataSources(baseDataSources, envDataSources []*types.
 				Resource:    fmt.Sprintf("data.%s", key),
 				Environment: env,
 				Path:        "",
-				Expected:    cty.NullVal(cty.DynamicPseudoType),
-				Actual:      cty.StringVal("exists"),
+				Expected:    cty.BoolVal(false),
+				Actual:      cty.BoolVal(true),
 				IsIgnored:   d.ignoreMatcher.IsIgnored(resourcePath),
 			}
 			results = append(results, diff)
