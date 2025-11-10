@@ -180,14 +180,34 @@ func (r *ResultReporter) getVariableValue(envResource *types.EnvResources, resou
 	return "-"
 }
 
-// findResource はリソースを名前で検索する
+// findResource はリソースを名前で検索する（通常のresourceとdataリソース両方に対応）
 func (r *ResultReporter) findResource(envResources *types.EnvResources, resourceName string) *types.EnvResource {
+	// 通常のリソースを検索
 	for _, resource := range envResources.Resources {
 		fullName := resource.Type + "." + resource.Name
 		if fullName == resourceName {
 			return resource
 		}
 	}
+
+	// dataリソースを検索（data.aws_ami.ubuntu形式）
+	if strings.HasPrefix(resourceName, "data.") {
+		// "data." プレフィックスを削除
+		nameWithoutPrefix := strings.TrimPrefix(resourceName, "data.")
+		for _, dataSource := range envResources.DataSources {
+			fullName := dataSource.Type + "." + dataSource.Name
+			if fullName == nameWithoutPrefix {
+				// EnvData を EnvResource として扱えるように変換
+				return &types.EnvResource{
+					Type:   dataSource.Type,
+					Name:   dataSource.Name,
+					Attrs:  dataSource.Attrs,
+					Blocks: dataSource.Blocks,
+				}
+			}
+		}
+	}
+
 	return nil
 }
 
