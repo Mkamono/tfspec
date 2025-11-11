@@ -35,31 +35,54 @@ tfspecは、Terraformの環境間構成差分を自動検出し、「意図的�
 tfspec/
 ├── main.go          # エントリーポイント
 ├── go.mod           # Goモジュール定義（Go 1.25.1）
+├── go.sum           # 依存関係ロック
 ├── app/             # アプリケーションコード
-│   ├── cmd.go          # コマンドライン処理・UI
-│   ├── differ.go       # 差分検出ロジック
-│   ├── parser.go       # HCL解析・.tfspecignore読み込み
-│   ├── types.go        # データ構造定義
-│   ├── reporter.go     # Markdownレポート生成
-│   └── ignore_matcher.go  # 無視ルール判定
-├── docs/            # HCLライブラリの技術文書
+│   ├── cmd/
+│   │   └── cmd.go              # コマンドライン処理・UI（Cobra）
+│   ├── config/
+│   │   └── config.go           # 設定管理・環境ディレクトリ検出
+│   ├── differ/
+│   │   ├── differ.go           # 差分検出ロジック（リソース、属性、ブロック）
+│   │   └── ignore_matcher.go   # 無視ルール判定・検証
+│   ├── interfaces/
+│   │   └── interfaces.go       # サービスインターフェース定義（DI用）
+│   ├── parser/
+│   │   ├── parser.go           # HCL解析・.tfspecignore読み込み
+│   │   └── formatter.go        # cty.Value値のフォーマット（Markdown対応）
+│   ├── reporter/
+│   │   └── reporter.go         # Markdownテーブルレポート生成
+│   ├── service/
+│   │   ├── analyzer.go         # HCL解析・差分検出の統合
+│   │   ├── output.go           # レポート生成・出力
+│   │   └── service.go          # コマンド実行の統合（AppService）
+│   └── types/
+│       └── types.go            # データ構造定義（EnvResource, DiffResult等）
+├── docs/            # 技術文書
 │   └── hcl_deepwiki.md  # HCLライブラリの詳細仕様
-└── test/            # テストケース群
-    ├── basic_attribute_diff/      # 基本的な属性差分
-    ├── comment_parsing/          # コメント解析
-    ├── demo_diff/               # デモ差分
-    ├── demo_existence/          # デモ存在差分
-    ├── env_patterns/            # 環境パターン
-    ├── invalid_spec/            # 無効な仕様書
-    ├── list_diff/               # リスト差分
-    ├── multiple_attribute_diff/ # 複数属性差分
-    ├── multiple_spec_files/     # 複数仕様書ファイル
-    ├── multiple_tf_files/       # 複数.tf/.hclファイル読み込み
-    ├── nested_block_diff/       # ネストブロック差分
-    ├── partial_existence_diff/  # 部分存在差分
-    ├── resource_existence_diff/ # リソース存在差分
-    ├── single_spec_file/        # 単一仕様書ファイル
-    └── undeclared_diff/         # 未宣言差分
+└── test/            # テストケース群（26種類）
+    ├── basic_attribute_diff/        # 基本的な属性差分
+    ├── comment_parsing/             # .tfspecignoreコメント解析
+    ├── deeply_nested_blocks/        # 深くネストされたブロック
+    ├── demo_diff/ & demo_existence/ # デモンストレーション
+    ├── duplicate_resources/         # 同名リソースの処理
+    ├── empty_files/                 # 空HCLファイル処理
+    ├── env_patterns/                # 異なる環境パターン
+    ├── invalid_spec/                # 無効な.tfspecignore
+    ├── large_values/                # 大型データ処理
+    ├── list_diff/                   # リスト属性差分
+    ├── malformed_hcl/               # 不正なHCL構文
+    ├── module_locals_test/          # モジュール・ローカル変数
+    ├── multiple_attribute_diff/     # 複数属性差分
+    ├── multiple_spec_files/         # 複数.tfspecignoreファイル
+    ├── multiple_tf_files/           # 環境内の複数.tf/.hclファイル
+    ├── nested_block_diff/           # ネストブロック差分
+    ├── null_values/                 # null・ゼロ値処理
+    ├── partial_existence_diff/      # リソース部分存在差分
+    ├── resource_existence_diff/     # リソース存在差分
+    ├── single_spec_file/            # 単一.tfspecignoreファイル
+    ├── undeclared_diff/             # 未宣言差分
+    ├── unicode_and_special_chars/   # Unicode・特殊文字
+    └── whitespace_edge_cases/       # 空白文字エッジケース
 ```
 
 # テストケース例
@@ -167,40 +190,158 @@ test/multiple_tf_files/
 
 # アーキテクチャ詳細
 
+## 処理フロー
+
+```
+main.go
+  ↓
+TfspecApp.CreateRootCommand() (app/cmd/cmd.go)
+  ↓
+checkコマンド実行
+  ↓
+AppService.RunCheck() (app/service/service.go)
+  ├─ ConfigService.LoadConfig() (app/config/config.go)
+  │   └─ 環境ディレクトリの検出・確認
+  │
+  ├─ AnalyzerService.Analyze() (app/service/analyzer.go)
+  │   ├─ parser.LoadIgnoreRules()
+  │   ├─ parser.LoadIgnoreRulesWithComments() (コメント付き)
+  │   ├─ parseEnvironments() → parser.ParseMultipleFiles() (各環境)
+  │   │   └─ parser.ParseEnvFile() (各.tf/.hclファイル)
+  │   ├─ differ.Compare() (app/differ/differ.go)
+  │   │   ├─ ignoreMatcher.ValidateRules()
+  │   │   ├─ compareResourceExistence()
+  │   │   ├─ compareAttributes()
+  │   │   ├─ compareBlocks()
+  │   │   ├─ compareModules()
+  │   │   ├─ compareLocals()
+  │   │   ├─ compareVariables()
+  │   │   ├─ compareOutputs()
+  │   │   └─ compareDataSources()
+  │   └─ ignoreMatcher.GetWarnings()
+  │
+  └─ OutputService.OutputResults() (app/service/output.go)
+      ├─ reporter.GenerateMarkdown() (app/reporter/reporter.go)
+      │   ├─ buildTables()
+      │   ├─ fillMissingValues()
+      │   ├─ convertToGroupedRows()
+      │   └─ buildGroupedMarkdownTable()
+      ├─ コンソール出力
+      ├─ ファイル出力 (.tfspec/report.md等)
+      └─ PrintSummary()
+```
+
 ## 主要コンポーネント
 
-### cmd.go
-- コマンドライン引数の処理
+### cmd/cmd.go
+- **TfspecApp** - メインアプリケーションクラス
+- Cobraフレームワークによるコマンドライン処理
 - checkコマンドの実装
-- 各処理ステップの調整
-- エラーハンドリング
+- フラグ:
+  - `-v, --verbose` - 詳細出力
+  - `-o, --output [FILE]` - 出力ファイル指定
+  - `--no-fail` - ドリフト検出時にエラー終了しない
+  - `-e, --exclude-dirs` - 除外ディレクトリ
+  - `--max-value-length` - テーブル値の最大文字数
+  - `--trim-cell` - テーブルセルの前後余白削除
 
-### differ.go
-- 環境間の差分検出ロジック
+### config/config.go
+- **ConfigService** - 設定管理
+- `.tfspec` ディレクトリ検出
+- 環境ディレクトリの自動検出・解決
+- Terraformファイル（.tf/.hcl）の存在確認
+- 除外ディレクトリの処理
+
+### parser/parser.go
+- **HCLParser** - HCL解析エンジン
+- 単一ファイル・複数ファイル対応
+- リソース、モジュール、ローカル変数、入力変数、出力値、データソースを対応
+- 未解決の変数参照や関数呼び出しをソーステキストとして保存
+- **.tfspecignore読み込み機能:**
+  - 単一ファイル形式（`.tfspec/.tfspecignore`）
+  - 分割ファイル形式（`.tfspec/.tfspecignore/*.txt`）
+  - コメント解析（行頭・行末・複数行対応）
+
+### parser/formatter.go
+- **ValueFormatter** - cty.Value値のフォーマット
+- Markdown形式への変換（改行を`<br>`に）
+- 最大文字数制限機能
+- リスト・マップ・ネストされた値の整形
+
+### differ/differ.go
+- **HCLDiffer** - 環境間差分検出エンジン
 - IgnoreMatcherを使用した無視ルール適用
-- リソース存在差分、属性差分、ブロック差分の検出
+- **比較対象:**
+  - リソース存在差分
+  - 属性差分（tags含むネスト属性）
+  - ネストブロック差分（ingress[0]等）
+  - モジュール差分
+  - ローカル変数差分
+  - 入力変数差分
+  - 出力値差分
+  - データソース差分
+- **属性比較の統一:**
+  - ComparisonCallback型によるコールバック関数
+  - compareMapAttributes()ヘルパー関数で重複排除
 
-### parser.go
-- HCLファイルの解析（単一ファイル・複数ファイル対応）
-- .tfspecignoreファイルの読み込み
-- 単一ファイル・分割ファイル両方に対応
+### differ/ignore_matcher.go
+- **IgnoreMatcher** - 無視ルール判定エンジン
+- IsIgnored() - ルールマッチング（完全一致・プレフィックスマッチ）
+- ValidateRules() - ルール検証（警告報告）
+- 互換性エイリアス:
+  - IsIgnoredWithBlock()
+  - IsIgnoredWithBlockAttribute()
 
-### types.go
-- データ構造の定義
-- EnvResource, EnvBlock, DiffResult等
+### reporter/reporter.go
+- **ResultReporter** - Markdownレポート生成
+- 階層化テーブル形式（リソースタイプ → リソース名 → 属性）
+- ルールコメント付与
+- 欠落値の補填（環境別の値補完）
+- テーブル値の最大文字数制限
+- セル余白削除機能
 
-### reporter.go
-- Markdownテーブル形式でのレポート生成
-- 差分結果の整理・ソート
-- 値の補完処理
+### types/types.go
+- **データ構造定義:**
+  - **EnvResource** - Terraformリソース（属性・ネストブロック）
+  - **EnvBlock** - ネストブロック（labels・属性）
+  - **EnvResources** - 環境全体のリソース集合（リソース・モジュール・ローカル・変数・出力・データソース）
+  - **DiffResult** - 差分検出結果（リソース・環境・パス・期待値・実値・無視フラグ）
+  - **TableRow / GroupedTableRow** - テーブル表示用
 
-### ignore_matcher.go
-- 無視ルールのマッチング判定
-- 階層的パスマッチング
-- インデックスベースの判定
+### service/analyzer.go
+- **AnalyzerService** - HCL解析・差分検出の統合
+- Analyze() - .tfspecignore読み込み → 環境解析 → 差分検出 → 検証
+
+### service/output.go
+- **OutputService** - レポート生成・出力
+- OutputResults() - Markdown生成 → コンソール出力 → ファイル出力
+- PrintSummary() - カウント結果表示
+
+### service/service.go
+- **AppService** - コマンド実行統合
+- RunCheck() - 設定 → 分析 → 出力 → エラー処理
+
+### interfaces/interfaces.go
+- サービスインターフェース定義（DI対応）
+- AnalysisResult型定義
+
+## 最近の改善（属性比較リファクタリング）
+
+**コミット**: 3060ce8 (2025年11月11日)
+
+### 追加機能:
+1. **ComparisonCallback型** - 属性比較のコールバック関数化
+2. **compareMapAttributes()ヘルパー** - 汎用属性比較ロジック一元化
+3. **互換性エイリアス** - IsIgnoredWithBlock()等による後方互換性
+
+### 効果:
+- コード重複削減（differ.go: -118行）
+- 新ブロック型追加時の拡張性向上
+- メンテナンス性向上
 
 # 開発関連コマンド
 このプロジェクトはGoモジュールです（Go 1.25.1）
 - `go build` - ビルド
 - `go test` - テスト実行
 - `go mod tidy` - 依存関係の整理
+- `./tfspec check` - ツール実行
