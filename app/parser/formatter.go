@@ -58,9 +58,9 @@ func (f *ValueFormatter) formatCtyValue(ctyVal cty.Value) string {
 	switch {
 	case ctyVal.Type() == cty.String:
 		str := ctyVal.AsString()
-		// Markdown出力の場合、改行を<br>に変換
+		// Markdown出力の場合、改行を<br>&nbsp;&nbsp;に変換（インデント付き）
 		if f.useMarkdownLineBreaks && strings.Contains(str, "\n") {
-			str = strings.ReplaceAll(str, "\n", "<br>")
+			str = strings.ReplaceAll(str, "\n", "<br>&nbsp;&nbsp;")
 		}
 		return str
 	case ctyVal.Type() == cty.Number:
@@ -81,9 +81,9 @@ func (f *ValueFormatter) formatCtyValue(ctyVal cty.Value) string {
 		return f.formatMapValue(ctyVal)
 	default:
 		result := fmt.Sprintf("%s", ctyVal)
-		// Markdown出力の場合、改行を<br>に変換
+		// Markdown出力の場合、改行を<br>&nbsp;&nbsp;に変換（インデント付き）
 		if f.useMarkdownLineBreaks {
-			result = strings.ReplaceAll(result, "\n", "<br>")
+			result = strings.ReplaceAll(result, "\n", "<br>&nbsp;&nbsp;")
 		}
 		return result
 	}
@@ -97,8 +97,8 @@ func (f *ValueFormatter) formatListValue(ctyVal cty.Value) string {
 	}
 
 	if f.useMarkdownLineBreaks && len(elements) > 2 {
-		// 複数要素の場合は改行で区切る
-		return fmt.Sprintf("[%s]", strings.Join(elements, "<br>"))
+		// 複数要素の場合は改行で区切る（インデント付き）
+		return fmt.Sprintf("[<br>&nbsp;&nbsp;%s<br>]", strings.Join(elements, "<br>&nbsp;&nbsp;"))
 	}
 	return fmt.Sprintf("[%s]", strings.Join(elements, ", "))
 }
@@ -111,8 +111,8 @@ func (f *ValueFormatter) formatMapValue(ctyVal cty.Value) string {
 	}
 
 	if f.useMarkdownLineBreaks && len(pairs) > 2 {
-		// 複数ペアの場合は改行で区切る
-		return fmt.Sprintf("{%s}", strings.Join(pairs, "<br>"))
+		// 複数ペアの場合は改行で区切る（インデント付き）
+		return fmt.Sprintf("{<br>&nbsp;&nbsp;%s<br>}", strings.Join(pairs, "<br>&nbsp;&nbsp;"))
 	}
 	return fmt.Sprintf("{%s}", strings.Join(pairs, ", "))
 }

@@ -430,12 +430,46 @@ func (r *ResultReporter) buildGroupedMarkdownTable(rows []types.GroupedTableRow,
 
 	result := buffer.String()
 
+	// 値カラムのセパレータを左寄せに変更
+	result = r.adjustValueColumnAlignment(result, len(envNames))
+
 	// trimCell オプションでセル内の前後の空白を削除
 	if r.trimCell {
 		result = r.trimCellPadding(result)
 	}
 
 	return result
+}
+
+// adjustValueColumnAlignment は値カラムのセパレータを左寄せに変更する
+func (r *ResultReporter) adjustValueColumnAlignment(markdown string, envCount int) string {
+	lines := strings.Split(markdown, "\n")
+	var result []string
+
+	for _, line := range lines {
+		// セパレータ行を検出（:------: のパターン）
+		if strings.Contains(line, "|:") && strings.Contains(line, ":|") {
+			// セパレータ行をパース
+			parts := strings.Split(line, "|")
+
+			// 最初の3つのカラム（リソースタイプ、リソース名、属性パス）は中央寄せを維持
+			// parts[0]は空、parts[1]～parts[3]はメタデータカラム、parts[4]以降が値カラム
+			for i := 4; i < len(parts)-1 && i < 4+envCount; i++ {
+				sep := parts[i]
+				// 中央寄せ（:------:）を左寄せ（:------）に変更
+				if strings.HasPrefix(sep, ":") && strings.HasSuffix(sep, ":") {
+					// ":------:" → ":------"
+					parts[i] = ":" + strings.Trim(sep, ":")
+				}
+			}
+
+			result = append(result, strings.Join(parts, "|"))
+		} else {
+			result = append(result, line)
+		}
+	}
+
+	return strings.Join(result, "\n")
 }
 
 // trimCellPadding はMarkdownテーブルのセル内の前後の余白を削除する
