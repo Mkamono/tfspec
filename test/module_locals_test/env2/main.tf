@@ -35,6 +35,12 @@ locals {
     "192.168.0.0/16"  # 追加要素
   ]
 
+  # HCL関数を含むローカル変数（env1と異なる）
+  name_with_length = length(var.db_instance_class)
+  merged_tags = merge(local.common_tags, { "Environment" = "prod" })
+  name_prefix = "prod-${var.db_instance_class}"
+  file_content = file("${path.module}/prod-config.txt")
+
   # env2のみに存在するオブジェクト
   prod_only_config = {
     ssl_enabled      = true

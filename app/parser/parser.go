@@ -13,11 +13,14 @@ import (
 
 type HCLParser struct {
 	parser *hclparse.Parser
+	// ファイルのソースバイト列をキャッシュ（Range.SliceBytes用）
+	sourceCache map[string][]byte
 }
 
 func NewHCLParser() *HCLParser {
 	return &HCLParser{
-		parser: hclparse.NewParser(),
+		parser:      hclparse.NewParser(),
+		sourceCache: make(map[string][]byte),
 	}
 }
 
@@ -60,6 +63,9 @@ func (p *HCLParser) ParseEnvFile(filename string) (*types.EnvResources, error) {
 	if diags.HasErrors() {
 		return nil, diags
 	}
+
+	// ソースバイト列をキャッシュに保存（Range.SliceBytes用）
+	p.sourceCache[filename] = file.Bytes
 
 	// Terraformの全ブロックタイプを解析
 	content, _, diags := file.Body.PartialContent(&hcl.BodySchema{
@@ -116,7 +122,7 @@ func (p *HCLParser) ParseEnvFile(filename string) (*types.EnvResources, error) {
 				Blocks: make(map[string][]*types.EnvBlock),
 			}
 
-			if err := p.parseResourceContent(block.Body, evalCtx, envResource); err != nil {
+			if err := p.parseResourceContent(block.Body, filename, evalCtx, envResource); err != nil {
 				return nil, err
 			}
 
@@ -128,14 +134,14 @@ func (p *HCLParser) ParseEnvFile(filename string) (*types.EnvResources, error) {
 				Attrs: make(map[string]cty.Value),
 			}
 
-			if err := p.parseSimpleBlockContent(block.Body, evalCtx, envModule.Attrs); err != nil {
+			if err := p.parseSimpleBlockContent(block.Body, filename, evalCtx, envModule.Attrs); err != nil {
 				return nil, err
 			}
 
 			modules = append(modules, envModule)
 
 		case "locals":
-			if err := p.parseLocalsContent(block.Body, evalCtx, &locals); err != nil {
+			if err := p.parseLocalsContent(block.Body, filename, evalCtx, &locals); err != nil {
 				return nil, err
 			}
 
@@ -145,7 +151,7 @@ func (p *HCLParser) ParseEnvFile(filename string) (*types.EnvResources, error) {
 				Attrs: make(map[string]cty.Value),
 			}
 
-			if err := p.parseSimpleBlockContent(block.Body, evalCtx, envVariable.Attrs); err != nil {
+			if err := p.parseSimpleBlockContent(block.Body, filename, evalCtx, envVariable.Attrs); err != nil {
 				return nil, err
 			}
 
@@ -157,7 +163,7 @@ func (p *HCLParser) ParseEnvFile(filename string) (*types.EnvResources, error) {
 				Attrs: make(map[string]cty.Value),
 			}
 
-			if err := p.parseSimpleBlockContent(block.Body, evalCtx, envOutput.Attrs); err != nil {
+			if err := p.parseSimpleBlockContent(block.Body, filename, evalCtx, envOutput.Attrs); err != nil {
 				return nil, err
 			}
 
@@ -171,7 +177,7 @@ func (p *HCLParser) ParseEnvFile(filename string) (*types.EnvResources, error) {
 				Blocks: make(map[string][]*types.EnvBlock),
 			}
 
-			if err := p.parseResourceContent(block.Body, evalCtx, &types.EnvResource{
+			if err := p.parseResourceContent(block.Body, filename, evalCtx, &types.EnvResource{
 				Type:   envData.Type,
 				Name:   envData.Name,
 				Attrs:  envData.Attrs,
@@ -195,15 +201,20 @@ func (p *HCLParser) ParseEnvFile(filename string) (*types.EnvResources, error) {
 }
 
 // リソース内のコンテンツを再帰的に解析（属性とネストブロック）
-func (p *HCLParser) parseResourceContent(body hcl.Body, evalCtx *hcl.EvalContext, resource *types.EnvResource) error {
+func (p *HCLParser) parseResourceContent(body hcl.Body, filename string, evalCtx *hcl.EvalContext, resource *types.EnvResource) error {
 	// 低レベルのhclsyntax.Bodyを使用して動的解析
 	if syntaxBody, ok := body.(*hclsyntax.Body); ok {
+		// ソースバイト列を取得
+		sourceBytes := p.sourceCache[filename]
+
 		// 属性を解析
 		for name, attr := range syntaxBody.Attributes {
 			value, diags := attr.Expr.Value(evalCtx)
 			if diags.HasErrors() {
-				// 変数参照などの解決不能な値は特別な値として保存
-				resource.Attrs[name] = cty.StringVal("${unresolved_reference}")
+				// 変数参照や関数などの解決不能な値は、ソーステキストを保存
+				exprRange := attr.Expr.Range()
+				sourceText := string(exprRange.SliceBytes(sourceBytes))
+				resource.Attrs[name] = cty.StringVal(sourceText)
 			} else {
 				resource.Attrs[name] = value
 			}
@@ -221,8 +232,10 @@ func (p *HCLParser) parseResourceContent(body hcl.Body, evalCtx *hcl.EvalContext
 			for name, attr := range block.Body.Attributes {
 				value, diags := attr.Expr.Value(evalCtx)
 				if diags.HasErrors() {
-					// 変数参照などの解決不能な値は特別な値として保存
-					envBlock.Attrs[name] = cty.StringVal("${unresolved_reference}")
+					// 変数参照や関数などの解決不能な値は、ソーステキストを保存
+					exprRange := attr.Expr.Range()
+					sourceText := string(exprRange.SliceBytes(sourceBytes))
+					envBlock.Attrs[name] = cty.StringVal(sourceText)
 				} else {
 					envBlock.Attrs[name] = value
 				}
@@ -241,11 +254,15 @@ func (p *HCLParser) parseResourceContent(body hcl.Body, evalCtx *hcl.EvalContext
 		return diags
 	}
 
+	sourceBytes := p.sourceCache[filename]
+
 	for name, attr := range attrs {
 		value, diags := attr.Expr.Value(evalCtx)
 		if diags.HasErrors() {
-			// 変数参照などの解決不能な値は特別な値として保存
-			resource.Attrs[name] = cty.StringVal("${unresolved_reference}")
+			// 変数参照や関数などの解決不能な値は、ソーステキストを保存
+			exprRange := attr.Expr.Range()
+			sourceText := string(exprRange.SliceBytes(sourceBytes))
+			resource.Attrs[name] = cty.StringVal(sourceText)
 		} else {
 			resource.Attrs[name] = value
 		}
@@ -255,14 +272,18 @@ func (p *HCLParser) parseResourceContent(body hcl.Body, evalCtx *hcl.EvalContext
 }
 
 // parseSimpleBlockContent は単純なブロック（module、variable、outputなど）の属性を解析
-func (p *HCLParser) parseSimpleBlockContent(body hcl.Body, evalCtx *hcl.EvalContext, attrs map[string]cty.Value) error {
+func (p *HCLParser) parseSimpleBlockContent(body hcl.Body, filename string, evalCtx *hcl.EvalContext, attrs map[string]cty.Value) error {
 	if syntaxBody, ok := body.(*hclsyntax.Body); ok {
+		sourceBytes := p.sourceCache[filename]
+
 		// 属性を解析
 		for name, attr := range syntaxBody.Attributes {
 			value, diags := attr.Expr.Value(evalCtx)
 			if diags.HasErrors() {
-				// 変数参照などの解決不能な値は特別な値として保存
-				attrs[name] = cty.StringVal("${unresolved_reference}")
+				// 変数参照や関数などの解決不能な値は、ソーステキストを保存
+				exprRange := attr.Expr.Range()
+				sourceText := string(exprRange.SliceBytes(sourceBytes))
+				attrs[name] = cty.StringVal(sourceText)
 			} else {
 				attrs[name] = value
 			}
@@ -276,10 +297,15 @@ func (p *HCLParser) parseSimpleBlockContent(body hcl.Body, evalCtx *hcl.EvalCont
 		return diags
 	}
 
+	sourceBytes := p.sourceCache[filename]
+
 	for name, attr := range attributes {
 		value, diags := attr.Expr.Value(evalCtx)
 		if diags.HasErrors() {
-			attrs[name] = cty.StringVal("${unresolved_reference}")
+			// 変数参照や関数などの解決不能な値は、ソーステキストを保存
+			exprRange := attr.Expr.Range()
+			sourceText := string(exprRange.SliceBytes(sourceBytes))
+			attrs[name] = cty.StringVal(sourceText)
 		} else {
 			attrs[name] = value
 		}
@@ -289,14 +315,18 @@ func (p *HCLParser) parseSimpleBlockContent(body hcl.Body, evalCtx *hcl.EvalCont
 }
 
 // parseLocalsContent はlocalsブロック内のローカル変数を解析
-func (p *HCLParser) parseLocalsContent(body hcl.Body, evalCtx *hcl.EvalContext, locals *[]*types.EnvLocal) error {
+func (p *HCLParser) parseLocalsContent(body hcl.Body, filename string, evalCtx *hcl.EvalContext, locals *[]*types.EnvLocal) error {
+	sourceBytes := p.sourceCache[filename]
+
 	if syntaxBody, ok := body.(*hclsyntax.Body); ok {
 		// localsブロック内の属性を解析
 		for name, attr := range syntaxBody.Attributes {
 			value, diags := attr.Expr.Value(evalCtx)
 			if diags.HasErrors() {
-				// 変数参照などの解決不能な値は特別な値として保存
-				value = cty.StringVal("${unresolved_reference}")
+				// 変数参照や関数などの解決不能な値は、ソーステキストを保存
+				exprRange := attr.Expr.Range()
+				sourceText := string(exprRange.SliceBytes(sourceBytes))
+				value = cty.StringVal(sourceText)
 			}
 
 			envLocal := &types.EnvLocal{
@@ -318,7 +348,10 @@ func (p *HCLParser) parseLocalsContent(body hcl.Body, evalCtx *hcl.EvalContext, 
 	for name, attr := range attributes {
 		value, diags := attr.Expr.Value(evalCtx)
 		if diags.HasErrors() {
-			value = cty.StringVal("${unresolved_reference}")
+			// 変数参照や関数などの解決不能な値は、ソーステキストを保存
+			exprRange := attr.Expr.Range()
+			sourceText := string(exprRange.SliceBytes(sourceBytes))
+			value = cty.StringVal(sourceText)
 		}
 
 		envLocal := &types.EnvLocal{

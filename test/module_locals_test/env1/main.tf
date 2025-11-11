@@ -33,6 +33,12 @@ locals {
     "172.16.0.0/12"
   ]
 
+  # HCL関数を含むローカル変数
+  name_with_length = length(var.instance_type)
+  merged_tags = merge(local.common_tags, { "AdditionalTag" = "value" })
+  name_prefix = "app-${var.instance_type}"
+  file_content = file("${path.module}/config.txt")
+
   # env1のみに存在するオブジェクト
   dev_only_config = {
     debug_mode = true

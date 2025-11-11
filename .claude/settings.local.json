@@ -5,7 +5,8 @@
       "Bash(../../tfspec check:*)",
       "Bash(go run:*)",
       "Bash(go mod:*)",
-      "Bash(find:*)"
+      "Bash(find:*)",
+      "WebSearch"
     ],
     "deny": [],
     "ask": []

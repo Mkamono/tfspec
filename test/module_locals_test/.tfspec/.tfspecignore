@@ -11,3 +11,9 @@ output.vpc_cidr
 
 # 本番環境では追加のvariableが必要
 var.db_instance_class
+
+# HCL関数は環境によって異なることが予想される
+local.name_with_length
+local.merged_tags
+local.name_prefix
+local.file_content
