@@ -341,12 +341,8 @@ func (r *ResultReporter) parseResourceName(resource string) (string, string) {
 		return "variable", after
 	}
 	if after, found := strings.CutPrefix(resource, "data."); found {
-		// data.aws_instance.web -> type: data.aws_instance, name: web
-		parts := strings.SplitN(after, ".", 2)
-		if len(parts) >= 2 {
-			return "data." + parts[0], parts[1]
-		}
-		return "data", resource
+		// data.aws_ami -> type: data, name: aws_ami
+		return "data", after
 	}
 
 	// 通常のリソース（aws_instance.web -> type: resource, name: aws_instance.web）

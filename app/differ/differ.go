@@ -891,9 +891,9 @@ func (d *HCLDiffer) compareDataSourceAttributes(baseData, envData *types.EnvData
 		if !baseValue.Equals(value).True() {
 			resourcePath := fmt.Sprintf("data.%s.%s.%s", baseData.Type, baseData.Name, attrName)
 			diff := &types.DiffResult{
-				Resource:    fmt.Sprintf("data.%s.%s", baseData.Type, baseData.Name),
+				Resource:    fmt.Sprintf("data.%s", baseData.Type),
 				Environment: env,
-				Path:        attrName,
+				Path:        fmt.Sprintf("%s.%s", baseData.Name, attrName),
 				Expected:    baseValue,
 				Actual:      value,
 				IsIgnored:   d.ignoreMatcher.IsIgnored(resourcePath),
@@ -944,9 +944,9 @@ func (d *HCLDiffer) compareDataSourceBlocks(baseResource, resource *types.EnvRes
 				// 新しいブロックが追加された
 				resourcePath := fmt.Sprintf("data.%s.%s.%s[%d]", baseResource.Type, baseResource.Name, blockType, i)
 				diff := &types.DiffResult{
-					Resource:    fmt.Sprintf("data.%s.%s", baseResource.Type, baseResource.Name),
+					Resource:    fmt.Sprintf("data.%s", baseResource.Type),
 					Environment: env,
-					Path:        fmt.Sprintf("%s[%d]", blockType, i),
+					Path:        fmt.Sprintf("%s.%s[%d]", baseResource.Name, blockType, i),
 					Expected:    cty.NullVal(cty.DynamicPseudoType),
 					Actual:      d.formatBlockContent(block),
 					IsIgnored:   d.ignoreMatcher.IsIgnoredWithBlock(resourcePath, block, blockType),
@@ -956,9 +956,9 @@ func (d *HCLDiffer) compareDataSourceBlocks(baseResource, resource *types.EnvRes
 				// ブロックが削除された
 				resourcePath := fmt.Sprintf("data.%s.%s.%s[%d]", baseResource.Type, baseResource.Name, blockType, i)
 				diff := &types.DiffResult{
-					Resource:    fmt.Sprintf("data.%s.%s", baseResource.Type, baseResource.Name),
+					Resource:    fmt.Sprintf("data.%s", baseResource.Type),
 					Environment: env,
-					Path:        fmt.Sprintf("%s[%d]", blockType, i),
+					Path:        fmt.Sprintf("%s.%s[%d]", baseResource.Name, blockType, i),
 					Expected:    d.formatBlockContent(baseBlock),
 					Actual:      cty.NullVal(cty.DynamicPseudoType),
 					IsIgnored:   d.ignoreMatcher.IsIgnoredWithBlock(resourcePath, baseBlock, blockType),
@@ -1003,9 +1003,9 @@ func (d *HCLDiffer) compareDataSourceBlockAttributes(resource *types.EnvResource
 		if !baseValue.Equals(value).True() {
 			resourcePath := fmt.Sprintf("data.%s.%s.%s[%d].%s", resource.Type, resource.Name, blockType, index, attrName)
 			diff := &types.DiffResult{
-				Resource:    fmt.Sprintf("data.%s.%s", resource.Type, resource.Name),
+				Resource:    fmt.Sprintf("data.%s", resource.Type),
 				Environment: env,
-				Path:        fmt.Sprintf("%s[%d].%s", blockType, index, attrName),
+				Path:        fmt.Sprintf("%s.%s[%d].%s", resource.Name, blockType, index, attrName),
 				Expected:    baseValue,
 				Actual:      value,
 				IsIgnored:   d.ignoreMatcher.IsIgnoredWithBlockAttribute(resourcePath, block, blockType),
