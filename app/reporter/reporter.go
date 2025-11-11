@@ -436,6 +436,8 @@ func (r *ResultReporter) buildGroupedMarkdownTable(rows []types.GroupedTableRow,
 	// trimCell オプションでセル内の前後の空白を削除
 	if r.trimCell {
 		result = r.trimCellPadding(result)
+		// セパレータ行を正規化（最小限の長さに調整）
+		result = r.normalizeSeparatorLines(result)
 	}
 
 	return result
@@ -478,8 +480,9 @@ func (r *ResultReporter) trimCellPadding(markdown string) string {
 	var result []string
 
 	for _, line := range lines {
-		// セパレータ行（|---|など）はそのまま
-		if strings.HasPrefix(strings.TrimSpace(line), "|") && !strings.Contains(line, " ") {
+		// セパレータ行（|:-:|など）はそのまま保持
+		// セパレータ行は、パイプとハイフン・コロンのみで構成される
+		if isMarkdownSeparatorLine(line) {
 			// セパレータ行の場合
 			result = append(result, line)
 		} else if strings.Contains(line, "|") {
@@ -492,6 +495,87 @@ func (r *ResultReporter) trimCellPadding(markdown string) string {
 	}
 
 	return strings.Join(result, "\n")
+}
+
+// isMarkdownSeparatorLine はMarkdownテーブルのセパレータ行かどうかを判定する
+// セパレータ行は「|」「-」「:」のみで構成される
+func isMarkdownSeparatorLine(line string) bool {
+	// 空行はセパレータ行ではない
+	if len(strings.TrimSpace(line)) == 0 {
+		return false
+	}
+
+	// 各文字が「|」「-」「:」「 」（セル内の空白のみ）のいずれかであるかチェック
+	for _, ch := range line {
+		if ch != '|' && ch != '-' && ch != ':' && ch != ' ' {
+			return false
+		}
+	}
+
+	// 最低でも「|」と「-」が含まれていることを確認
+	return strings.Contains(line, "|") && strings.Contains(line, "-")
+}
+
+// normalizeSeparatorLines はセパレータ行を正規化し、最小限の長さに調整する
+func (r *ResultReporter) normalizeSeparatorLines(markdown string) string {
+	lines := strings.Split(markdown, "\n")
+	var result []string
+
+	for _, line := range lines {
+		if isMarkdownSeparatorLine(line) {
+			// セパレータ行を正規化
+			// 各セル内のハイフン部分を「-」1文字に統一（コロンは保持）
+			normalized := normalizeSeparatorLine(line)
+			result = append(result, normalized)
+		} else {
+			result = append(result, line)
+		}
+	}
+
+	return strings.Join(result, "\n")
+}
+
+// normalizeSeparatorLine は1つのセパレータ行を正規化する
+// 例: |:---:|:---|:-| → |:-:|:-|:-|
+func normalizeSeparatorLine(line string) string {
+	// パイプで分割（最初と最後の要素は空）
+	parts := strings.Split(line, "|")
+	var normalizedParts []string
+
+	for i, part := range parts {
+		part = strings.TrimSpace(part)
+
+		// 最初と最後のパイプは空であることが多いので保持
+		if i == 0 || i == len(parts)-1 {
+			normalizedParts = append(normalizedParts, part)
+			continue
+		}
+
+		if part == "" {
+			normalizedParts = append(normalizedParts, part)
+			continue
+		}
+
+		// ハイフンとコロンで構成されている場合、正規化
+		if strings.ContainsAny(part, "-:") {
+			// コロンの位置を保持しながら、ハイフンを1文字に
+			var normalized string
+			if strings.HasPrefix(part, ":") && strings.HasSuffix(part, ":") {
+				normalized = ":-:"
+			} else if strings.HasPrefix(part, ":") {
+				normalized = ":-"
+			} else if strings.HasSuffix(part, ":") {
+				normalized = "-:"
+			} else {
+				normalized = "-"
+			}
+			normalizedParts = append(normalizedParts, normalized)
+		} else {
+			normalizedParts = append(normalizedParts, part)
+		}
+	}
+
+	return strings.Join(normalizedParts, "|")
 }
 
 // trimTableLine はテーブルの1行内の各セルの前後余白を削除する
