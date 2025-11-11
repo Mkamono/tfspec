@@ -202,8 +202,9 @@ func (p *HCLParser) parseResourceContent(body hcl.Body, evalCtx *hcl.EvalContext
 		for name, attr := range syntaxBody.Attributes {
 			value, diags := attr.Expr.Value(evalCtx)
 			if diags.HasErrors() {
-				// 変数参照などの解決不能な値は特別な値として保存
-				resource.Attrs[name] = cty.StringVal("${unresolved_reference}")
+				// 変数参照などの解決不能な値は元の式をそのまま保存
+				exprText := p.extractExpressionText(attr.Expr)
+				resource.Attrs[name] = cty.StringVal(exprText)
 			} else {
 				resource.Attrs[name] = value
 			}
@@ -221,8 +222,9 @@ func (p *HCLParser) parseResourceContent(body hcl.Body, evalCtx *hcl.EvalContext
 			for name, attr := range block.Body.Attributes {
 				value, diags := attr.Expr.Value(evalCtx)
 				if diags.HasErrors() {
-					// 変数参照などの解決不能な値は特別な値として保存
-					envBlock.Attrs[name] = cty.StringVal("${unresolved_reference}")
+					// 変数参照などの解決不能な値は元の式をそのまま保存
+					exprText := p.extractExpressionText(attr.Expr)
+					envBlock.Attrs[name] = cty.StringVal(exprText)
 				} else {
 					envBlock.Attrs[name] = value
 				}
@@ -244,8 +246,9 @@ func (p *HCLParser) parseResourceContent(body hcl.Body, evalCtx *hcl.EvalContext
 	for name, attr := range attrs {
 		value, diags := attr.Expr.Value(evalCtx)
 		if diags.HasErrors() {
-			// 変数参照などの解決不能な値は特別な値として保存
-			resource.Attrs[name] = cty.StringVal("${unresolved_reference}")
+			// 変数参照などの解決不能な値は元の式をそのまま保存
+			exprText := p.extractExpressionText(attr.Expr)
+			resource.Attrs[name] = cty.StringVal(exprText)
 		} else {
 			resource.Attrs[name] = value
 		}
@@ -261,8 +264,9 @@ func (p *HCLParser) parseSimpleBlockContent(body hcl.Body, evalCtx *hcl.EvalCont
 		for name, attr := range syntaxBody.Attributes {
 			value, diags := attr.Expr.Value(evalCtx)
 			if diags.HasErrors() {
-				// 変数参照などの解決不能な値は特別な値として保存
-				attrs[name] = cty.StringVal("${unresolved_reference}")
+				// 変数参照などの解決不能な値は元の式をそのまま保存
+				exprText := p.extractExpressionText(attr.Expr)
+				attrs[name] = cty.StringVal(exprText)
 			} else {
 				attrs[name] = value
 			}
@@ -279,7 +283,8 @@ func (p *HCLParser) parseSimpleBlockContent(body hcl.Body, evalCtx *hcl.EvalCont
 	for name, attr := range attributes {
 		value, diags := attr.Expr.Value(evalCtx)
 		if diags.HasErrors() {
-			attrs[name] = cty.StringVal("${unresolved_reference}")
+			exprText := p.extractExpressionText(attr.Expr)
+			attrs[name] = cty.StringVal(exprText)
 		} else {
 			attrs[name] = value
 		}
@@ -295,8 +300,9 @@ func (p *HCLParser) parseLocalsContent(body hcl.Body, evalCtx *hcl.EvalContext, 
 		for name, attr := range syntaxBody.Attributes {
 			value, diags := attr.Expr.Value(evalCtx)
 			if diags.HasErrors() {
-				// 変数参照などの解決不能な値は特別な値として保存
-				value = cty.StringVal("${unresolved_reference}")
+				// 変数参照などの解決不能な値は元の式をそのまま保存
+				exprText := p.extractExpressionText(attr.Expr)
+				value = cty.StringVal(exprText)
 			}
 
 			envLocal := &types.EnvLocal{
@@ -318,7 +324,8 @@ func (p *HCLParser) parseLocalsContent(body hcl.Body, evalCtx *hcl.EvalContext, 
 	for name, attr := range attributes {
 		value, diags := attr.Expr.Value(evalCtx)
 		if diags.HasErrors() {
-			value = cty.StringVal("${unresolved_reference}")
+			exprText := p.extractExpressionText(attr.Expr)
+			value = cty.StringVal(exprText)
 		}
 
 		envLocal := &types.EnvLocal{
@@ -330,6 +337,35 @@ func (p *HCLParser) parseLocalsContent(body hcl.Body, evalCtx *hcl.EvalContext, 
 	}
 
 	return nil
+}
+
+// extractExpressionText は式から元のHCLテキストを抽出する
+func (p *HCLParser) extractExpressionText(expr hcl.Expression) string {
+	// 式の範囲情報を取得
+	exprRange := expr.Range()
+
+	// ファイル名からファイルを取得
+	files := p.parser.Files()
+	file, ok := files[exprRange.Filename]
+	if !ok {
+		// ファイルが見つからない場合はフォールバック
+		return "${unresolved_expression}"
+	}
+
+	// ファイルのバイト列から式のテキストを抽出
+	bytes := file.Bytes
+
+	// 範囲の開始・終了位置を取得
+	start := exprRange.Start.Byte
+	end := exprRange.End.Byte
+
+	// 範囲チェック
+	if start < 0 || end > len(bytes) || start > end {
+		return "${invalid_range}"
+	}
+
+	// テキストを抽出して返す
+	return string(bytes[start:end])
 }
 
 // LoadIgnoreRules は.tfspecignoreファイルの読み込みを行う

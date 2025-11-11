@@ -1,0 +1,18 @@
+# 環境別の意図的な差分を宣言
+
+# 環境ごとのインスタンスタイプの差異は意図的
+aws_instance.web.instance_type
+
+# 環境名が埋め込まれた属性は意図的に異なる
+aws_instance.web.tags.Name
+data.aws_ami.ubuntu.filter[0].values
+aws_security_group.web.name
+output.instance_id.description
+locals.instance_name
+
+# env3のみの追加ingressは意図的
+aws_security_group.web.ingress[1]
+
+# 変数のデフォルト値は環境ごとに異なる（意図的）
+variable.instance_type.default
+variable.environment.default
