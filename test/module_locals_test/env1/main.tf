@@ -115,6 +115,12 @@ data "aws_ami" "ubuntu" {
   }
 }
 
+
+data "google_certificate_manager_certificate" "test" {
+  project = "my-gcp-project"
+  name    = "my-certificate"
+}
+
 # 通常のresource記述（比較用）
 resource "aws_instance" "test" {
   ami           = data.aws_ami.ubuntu.id

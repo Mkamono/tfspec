@@ -340,8 +340,8 @@ func (d *HCLDiffer) compareBlocksWithPrefix(baseResource, resource *types.EnvRes
 				pathDisplay = fmt.Sprintf("%s[%d]", blockType, i)
 			} else {
 				resourcePath = fmt.Sprintf("%s.%s.%s.%s[%d]", resourcePrefix, baseResource.Type, baseResource.Name, blockType, i)
-				resourceDisplay = fmt.Sprintf("%s.%s", resourcePrefix, baseResource.Type)
-				pathDisplay = fmt.Sprintf("%s.%s[%d]", baseResource.Name, blockType, i)
+				resourceDisplay = fmt.Sprintf("%s.%s.%s", resourcePrefix, baseResource.Type, baseResource.Name)
+				pathDisplay = fmt.Sprintf("%s[%d]", blockType, i)
 			}
 
 			// ブロック存在差分をチェック
@@ -416,8 +416,8 @@ func (d *HCLDiffer) compareBlockAttributesWithPrefix(resource *types.EnvResource
 				pathDisplay = fmt.Sprintf("%s[%d].%s", blockType, index, attrName)
 			} else {
 				resourcePath = fmt.Sprintf("%s.%s.%s.%s[%d].%s", resourcePrefix, resource.Type, resource.Name, blockType, index, attrName)
-				resourceDisplay = fmt.Sprintf("%s.%s", resourcePrefix, resource.Type)
-				pathDisplay = fmt.Sprintf("%s.%s[%d].%s", resource.Name, blockType, index, attrName)
+				resourceDisplay = fmt.Sprintf("%s.%s.%s", resourcePrefix, resource.Type, resource.Name)
+				pathDisplay = fmt.Sprintf("%s[%d].%s", blockType, index, attrName)
 			}
 
 			diff := &types.DiffResult{
@@ -804,9 +804,9 @@ func (d *HCLDiffer) compareDataSourceAttributes(baseData, envData *types.EnvData
 		if !baseValue.Equals(value).True() {
 			resourcePath := fmt.Sprintf("data.%s.%s.%s", baseData.Type, baseData.Name, attrName)
 			diff := &types.DiffResult{
-				Resource:    fmt.Sprintf("data.%s", baseData.Type),
+				Resource:    fmt.Sprintf("data.%s.%s", baseData.Type, baseData.Name),
 				Environment: env,
-				Path:        fmt.Sprintf("%s.%s", baseData.Name, attrName),
+				Path:        attrName,
 				Expected:    baseValue,
 				Actual:      value,
 				IsIgnored:   d.ignoreMatcher.IsIgnored(resourcePath),
