@@ -136,7 +136,16 @@ func (r *ResultReporter) fillMissingValues(rows map[string]*types.TableRow, envN
 					// 通常のリソース処理
 					resource := r.findResource(envResource, row.Resource)
 					if resource != nil {
-						value := r.getResourceValue(resource, row.Path)
+						var value cty.Value
+						if row.Path == "" {
+							// リソース存在差分の場合
+							value = cty.BoolVal(true)
+						} else if val, exists := resource.Attrs[row.Path]; exists {
+							value = val
+						} else {
+							value = cty.NullVal(cty.String)
+						}
+
 						if !value.IsNull() {
 							row.Values[envName] = r.formatter.FormatValueWithMarkdown(value, r.maxValueLength)
 						} else {
@@ -151,21 +160,6 @@ func (r *ResultReporter) fillMissingValues(rows map[string]*types.TableRow, envN
 	}
 }
 
-// getLocalValue はlocal値を取得する
-func (r *ResultReporter) getLocalValue(envResource *types.EnvResources, resourceName string) string {
-	if envResource == nil {
-		return "-"
-	}
-
-	localName := strings.TrimPrefix(resourceName, "local.")
-	for _, local := range envResource.Locals {
-		if local.Name == localName {
-			return r.formatter.FormatValue(local.Value)
-		}
-	}
-	return "-"
-}
-
 // getLocalValueMarkdown はlocal値をマークダウン形式で取得する
 func (r *ResultReporter) getLocalValueMarkdown(envResource *types.EnvResources, resourceName string) string {
 	if envResource == nil {
@@ -176,26 +170,6 @@ func (r *ResultReporter) getLocalValueMarkdown(envResource *types.EnvResources, 
 	for _, local := range envResource.Locals {
 		if local.Name == localName {
 			return r.formatter.FormatValueWithMarkdown(local.Value, r.maxValueLength)
-		}
-	}
-	return "-"
-}
-
-// getVariableValue はvariable値を取得する
-func (r *ResultReporter) getVariableValue(envResource *types.EnvResources, resourceName string) string {
-	if envResource == nil {
-		return "-"
-	}
-
-	varName := strings.TrimPrefix(resourceName, "var.")
-	for _, variable := range envResource.Variables {
-		if variable.Name == varName {
-			if defaultVal, hasDefault := variable.Attrs["default"]; hasDefault && !defaultVal.IsNull() {
-				return r.formatter.FormatValue(defaultVal)
-			} else if descVal, hasDesc := variable.Attrs["description"]; hasDesc && !descVal.IsNull() {
-				return r.formatter.FormatValue(descVal)
-			}
-			return "-"
 		}
 	}
 	return "-"
@@ -250,23 +224,6 @@ func (r *ResultReporter) findResource(envResources *types.EnvResources, resource
 	}
 
 	return nil
-}
-
-// getResourceValue はリソースから指定パスの値を取得する
-func (r *ResultReporter) getResourceValue(resource *types.EnvResource, path string) cty.Value {
-	if path == "" {
-		// リソース存在差分の場合（真のリソース存在差分のみ）
-		if resource != nil {
-			return cty.BoolVal(true)
-		}
-		return cty.BoolVal(false)
-	}
-
-	if value, exists := resource.Attrs[path]; exists {
-		return value
-	}
-
-	return cty.NullVal(cty.String)
 }
 
 // mapToSortedSlice はマップをソート済みスライスに変換する

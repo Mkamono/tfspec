@@ -31,31 +31,23 @@ func (m *IgnoreMatcher) IsIgnored(resourcePath string) bool {
 		if m.isChildPath(resourcePath, rule) {
 			return true
 		}
-		if m.matchesPattern(rule, resourcePath) {
-			return true
-		}
 	}
 	return false
 }
 
-// IsIgnoredWithBlock はブロック情報を考慮した無視判定を行う
-func (m *IgnoreMatcher) IsIgnoredWithBlock(resourcePath string, block *types.EnvBlock, blockType string) bool {
+// IsIgnoredWithBlock はブロック情報を考慮した無視判定を行う（互換性のためのエイリアス）
+func (m *IgnoreMatcher) IsIgnoredWithBlock(resourcePath string) bool {
 	return m.IsIgnored(resourcePath)
 }
 
-// IsIgnoredWithBlockAttribute はブロック属性の無視判定を行う
-func (m *IgnoreMatcher) IsIgnoredWithBlockAttribute(resourcePath string, block *types.EnvBlock, blockType string) bool {
+// IsIgnoredWithBlockAttribute はブロック属性の無視判定を行う（互換性のためのエイリアス）
+func (m *IgnoreMatcher) IsIgnoredWithBlockAttribute(resourcePath string) bool {
 	return m.IsIgnored(resourcePath)
 }
 
 // isChildPath は指定されたパスが親ルールの子パスかどうかをチェックする
 func (m *IgnoreMatcher) isChildPath(resourcePath, parentRule string) bool {
 	return strings.HasPrefix(resourcePath, parentRule+".")
-}
-
-// matchesPattern はより柔軟なパターンマッチングを行う（将来の拡張用）
-func (m *IgnoreMatcher) matchesPattern(rule, resourcePath string) bool {
-	return false
 }
 
 // ValidateRules は与えられたリソースデータに対して無視ルールの検証を行う
