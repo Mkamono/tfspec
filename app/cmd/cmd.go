@@ -51,7 +51,7 @@ func (app *TfspecApp) CreateRootCommand() *cobra.Command {
 	checkCmd.Flags().Lookup("output").NoOptDefVal = ".tfspec/report.md"
 	checkCmd.Flags().Bool("no-fail", false, "構成ドリフトが検出されてもエラーコードで終了しない")
 	checkCmd.Flags().StringSliceP("exclude-dirs", "e", []string{}, "除外するディレクトリ名 (例: --exclude-dirs node_modules,vendor)")
-	checkCmd.Flags().Int("max-value-length", 200, "テーブルに表示する値の最大文字数 (デフォルト: 200)")
+	checkCmd.Flags().Int("max-value-length", 400, "テーブルに表示する値の最大文字数 (デフォルト: 400)")
 	checkCmd.Flags().Bool("trim-cell", false, "テーブルのセル前後の余白を削除")
 
 	rootCmd.AddCommand(checkCmd)

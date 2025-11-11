@@ -21,7 +21,7 @@ type ResultReporter struct {
 func NewResultReporter() *ResultReporter {
 	return &ResultReporter{
 		formatter:      parser.NewValueFormatter(),
-		maxValueLength: 200, // デフォルト値
+		maxValueLength: 400, // デフォルト値
 		trimCell:       false,
 	}
 }
