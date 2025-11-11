@@ -200,87 +200,15 @@ func (p *HCLParser) ParseEnvFile(filename string) (*types.EnvResources, error) {
 	}, nil
 }
 
-// リソース内のコンテンツを再帰的に解析（属性とネストブロック）
-func (p *HCLParser) parseResourceContent(body hcl.Body, filename string, evalCtx *hcl.EvalContext, resource *types.EnvResource) error {
-	// 低レベルのhclsyntax.Bodyを使用して動的解析
-	if syntaxBody, ok := body.(*hclsyntax.Body); ok {
-		// ソースバイト列を取得
-		sourceBytes := p.sourceCache[filename]
-
-		// 属性を解析
-		for name, attr := range syntaxBody.Attributes {
-			value, diags := attr.Expr.Value(evalCtx)
-			if diags.HasErrors() {
-				// 変数参照や関数などの解決不能な値は、ソーステキストを保存
-				exprRange := attr.Expr.Range()
-				sourceText := string(exprRange.SliceBytes(sourceBytes))
-				resource.Attrs[name] = cty.StringVal(sourceText)
-			} else {
-				resource.Attrs[name] = value
-			}
-		}
-
-		// ネストブロックを解析
-		for _, block := range syntaxBody.Blocks {
-			envBlock := &types.EnvBlock{
-				Type:   block.Type,
-				Labels: block.Labels,
-				Attrs:  make(map[string]cty.Value),
-			}
-
-			// ネストブロック内の属性を解析
-			for name, attr := range block.Body.Attributes {
-				value, diags := attr.Expr.Value(evalCtx)
-				if diags.HasErrors() {
-					// 変数参照や関数などの解決不能な値は、ソーステキストを保存
-					exprRange := attr.Expr.Range()
-					sourceText := string(exprRange.SliceBytes(sourceBytes))
-					envBlock.Attrs[name] = cty.StringVal(sourceText)
-				} else {
-					envBlock.Attrs[name] = value
-				}
-			}
-
-			// ブロック型別にグループ化
-			resource.Blocks[block.Type] = append(resource.Blocks[block.Type], envBlock)
-		}
-
-		return nil
-	}
-
-	// fallback: 高レベルAPI（制限がある）
-	attrs, diags := body.JustAttributes()
-	if diags.HasErrors() {
-		return diags
-	}
-
+// parseAttributesFromBody はHCL Bodyから属性を解析する汎用ヘルパー関数
+func (p *HCLParser) parseAttributesFromBody(body hcl.Body, filename string, evalCtx *hcl.EvalContext, attrs map[string]cty.Value) error {
 	sourceBytes := p.sourceCache[filename]
 
-	for name, attr := range attrs {
-		value, diags := attr.Expr.Value(evalCtx)
-		if diags.HasErrors() {
-			// 変数参照や関数などの解決不能な値は、ソーステキストを保存
-			exprRange := attr.Expr.Range()
-			sourceText := string(exprRange.SliceBytes(sourceBytes))
-			resource.Attrs[name] = cty.StringVal(sourceText)
-		} else {
-			resource.Attrs[name] = value
-		}
-	}
-
-	return nil
-}
-
-// parseSimpleBlockContent は単純なブロック（module、variable、outputなど）の属性を解析
-func (p *HCLParser) parseSimpleBlockContent(body hcl.Body, filename string, evalCtx *hcl.EvalContext, attrs map[string]cty.Value) error {
+	// 低レベルのhclsyntax.Bodyを試す
 	if syntaxBody, ok := body.(*hclsyntax.Body); ok {
-		sourceBytes := p.sourceCache[filename]
-
-		// 属性を解析
 		for name, attr := range syntaxBody.Attributes {
 			value, diags := attr.Expr.Value(evalCtx)
 			if diags.HasErrors() {
-				// 変数参照や関数などの解決不能な値は、ソーステキストを保存
 				exprRange := attr.Expr.Range()
 				sourceText := string(exprRange.SliceBytes(sourceBytes))
 				attrs[name] = cty.StringVal(sourceText)
@@ -292,17 +220,14 @@ func (p *HCLParser) parseSimpleBlockContent(body hcl.Body, filename string, eval
 	}
 
 	// fallback: 高レベルAPI
-	attributes, diags := body.JustAttributes()
+	hlAttrs, diags := body.JustAttributes()
 	if diags.HasErrors() {
 		return diags
 	}
 
-	sourceBytes := p.sourceCache[filename]
-
-	for name, attr := range attributes {
+	for name, attr := range hlAttrs {
 		value, diags := attr.Expr.Value(evalCtx)
 		if diags.HasErrors() {
-			// 変数参照や関数などの解決不能な値は、ソーステキストを保存
 			exprRange := attr.Expr.Range()
 			sourceText := string(exprRange.SliceBytes(sourceBytes))
 			attrs[name] = cty.StringVal(sourceText)
@@ -314,51 +239,57 @@ func (p *HCLParser) parseSimpleBlockContent(body hcl.Body, filename string, eval
 	return nil
 }
 
+// リソース内のコンテンツを再帰的に解析（属性とネストブロック）
+func (p *HCLParser) parseResourceContent(body hcl.Body, filename string, evalCtx *hcl.EvalContext, resource *types.EnvResource) error {
+	// 属性を解析
+	if err := p.parseAttributesFromBody(body, filename, evalCtx, resource.Attrs); err != nil {
+		return err
+	}
+
+	// 低レベルのhclsyntax.Bodyでネストブロックを解析
+	syntaxBody, ok := body.(*hclsyntax.Body)
+	if !ok {
+		return nil // fallbackの場合はネストブロック不可
+	}
+
+	for _, block := range syntaxBody.Blocks {
+		envBlock := &types.EnvBlock{
+			Type:   block.Type,
+			Labels: block.Labels,
+			Attrs:  make(map[string]cty.Value),
+		}
+
+		// ネストブロック内の属性を解析
+		if err := p.parseAttributesFromBody(block.Body, filename, evalCtx, envBlock.Attrs); err != nil {
+			return err
+		}
+
+		// ブロック型別にグループ化
+		resource.Blocks[block.Type] = append(resource.Blocks[block.Type], envBlock)
+	}
+
+	return nil
+}
+
+// parseSimpleBlockContent は単純なブロック（module、variable、outputなど）の属性を解析
+func (p *HCLParser) parseSimpleBlockContent(body hcl.Body, filename string, evalCtx *hcl.EvalContext, attrs map[string]cty.Value) error {
+	return p.parseAttributesFromBody(body, filename, evalCtx, attrs)
+}
+
 // parseLocalsContent はlocalsブロック内のローカル変数を解析
 func (p *HCLParser) parseLocalsContent(body hcl.Body, filename string, evalCtx *hcl.EvalContext, locals *[]*types.EnvLocal) error {
-	sourceBytes := p.sourceCache[filename]
-
-	if syntaxBody, ok := body.(*hclsyntax.Body); ok {
-		// localsブロック内の属性を解析
-		for name, attr := range syntaxBody.Attributes {
-			value, diags := attr.Expr.Value(evalCtx)
-			if diags.HasErrors() {
-				// 変数参照や関数などの解決不能な値は、ソーステキストを保存
-				exprRange := attr.Expr.Range()
-				sourceText := string(exprRange.SliceBytes(sourceBytes))
-				value = cty.StringVal(sourceText)
-			}
-
-			envLocal := &types.EnvLocal{
-				Name:  name,
-				Value: value,
-			}
-
-			*locals = append(*locals, envLocal)
-		}
-		return nil
+	// 一時的な属性マップを作成
+	attrs := make(map[string]cty.Value)
+	if err := p.parseAttributesFromBody(body, filename, evalCtx, attrs); err != nil {
+		return err
 	}
 
-	// fallback: 高レベルAPI
-	attributes, diags := body.JustAttributes()
-	if diags.HasErrors() {
-		return diags
-	}
-
-	for name, attr := range attributes {
-		value, diags := attr.Expr.Value(evalCtx)
-		if diags.HasErrors() {
-			// 変数参照や関数などの解決不能な値は、ソーステキストを保存
-			exprRange := attr.Expr.Range()
-			sourceText := string(exprRange.SliceBytes(sourceBytes))
-			value = cty.StringVal(sourceText)
-		}
-
+	// 属性をEnvLocalに変換
+	for name, value := range attrs {
 		envLocal := &types.EnvLocal{
 			Name:  name,
 			Value: value,
 		}
-
 		*locals = append(*locals, envLocal)
 	}
 
