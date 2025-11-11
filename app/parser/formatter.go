@@ -57,7 +57,12 @@ func (f *ValueFormatter) formatCtyValue(ctyVal cty.Value) string {
 
 	switch {
 	case ctyVal.Type() == cty.String:
-		return ctyVal.AsString()
+		str := ctyVal.AsString()
+		// Markdown出力の場合、改行を<br>に変換
+		if f.useMarkdownLineBreaks && strings.Contains(str, "\n") {
+			str = strings.ReplaceAll(str, "\n", "<br>")
+		}
+		return str
 	case ctyVal.Type() == cty.Number:
 		if bigFloat := ctyVal.AsBigFloat(); bigFloat.IsInt() {
 			if val, accuracy := bigFloat.Int64(); accuracy == 0 {
@@ -75,7 +80,12 @@ func (f *ValueFormatter) formatCtyValue(ctyVal cty.Value) string {
 	case ctyVal.Type().IsObjectType() || ctyVal.Type().IsMapType():
 		return f.formatMapValue(ctyVal)
 	default:
-		return fmt.Sprintf("%s", ctyVal)
+		result := fmt.Sprintf("%s", ctyVal)
+		// Markdown出力の場合、改行を<br>に変換
+		if f.useMarkdownLineBreaks {
+			result = strings.ReplaceAll(result, "\n", "<br>")
+		}
+		return result
 	}
 }
 

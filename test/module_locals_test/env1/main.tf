@@ -69,6 +69,14 @@ locals {
       }
     }
   }
+
+  concat_test = concat([
+    "a",
+    "b",
+    ], [
+    "c",
+    "d",
+  ])
 }
 
 # Variable記述のテスト
