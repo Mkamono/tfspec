@@ -71,12 +71,24 @@ locals {
   }
 
   concat_test = concat([
-    "a",
-    "b",
+    "a", # a
+    "b", # b
     ], [
     "c",
     "d",
   ])
+
+  object_test = {
+    # comment inside object
+    name = "test_object"
+    # another comment
+    numbers = [1, 2, 3, 4, 5]
+    # where is the comment?
+    nested = {
+      key1 = "value1"
+      key2 = "value2"
+    }
+  }
 }
 
 # Variable記述のテスト

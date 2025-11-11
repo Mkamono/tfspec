@@ -2,19 +2,19 @@
 
 ## 🚨 意図されていない差分
 
-| リソースタイプ |           リソース名            |       属性パス       |     ENV 1     |      ENV 2       |       ENV 3        |
+|リソースタイプ|リソース名|属性パス|ENV 1|ENV 2|ENV 3|
 |:--------------:|:-------------------------------:|:--------------------:|:-------------:|:----------------:|:------------------:|
-|    resource    | aws_instance.web-special_$chars |    instance_type     |   t3.micro    |     t3.small     |      t3.large      |
-|                |                                 |    tags.emoji_🌟     |      🚀       |        ⚡        |         💎         |
-|                |     aws_instance.web_日本語     |   tags.Environment   |      dev      |     staging      |     production     |
-|                |                                 |    tags.emoji_🌟     |      ⭐       |        🌙        |         ✨         |
-|                |                                 | tags.special-chars_$ | test@#$%^&*() |        -         | different_value!@# |
-|                |                                 |   tags.日本語キー    |   日本語値    | ステージング環境 |      本番環境      |
+|resource|aws_instance.web-special_$chars|instance_type|t3.micro|t3.small|t3.large|
+|||tags.emoji_🌟|🚀|⚡|💎|
+||aws_instance.web_日本語|tags.Environment|dev|staging|production|
+|||tags.emoji_🌟|⭐|🌙|✨|
+|||tags.special-chars_$|test@#$%^&*()|-|different_value!@#|
+|||tags.日本語キー|日本語値|ステージング環境|本番環境|
 
 ## 📝 無視された差分（意図的）
 
-| リソースタイプ |           リソース名            |    属性パス     |  ENV 1   |   ENV 2   |   ENV 3    |                理由                 |
+|リソースタイプ|リソース名|属性パス|ENV 1|ENV 2|ENV 3|理由|
 |:--------------:|:-------------------------------:|:---------------:|:--------:|:---------:|:----------:|:-----------------------------------:|
-|    resource    | aws_instance.web-special_$chars | tags.日本語キー | 開発環境 | 異なる値  | 本番用設定 |          特殊文字のテスト           |
-|                |     aws_instance.web_日本語     |  instance_type  | t3.small | t3.medium |  t3.large  | Unicode文字のテスト：日本語コメント |
+|resource|aws_instance.web-special_$chars|tags.日本語キー|開発環境|異なる値|本番用設定|特殊文字のテスト|
+||aws_instance.web_日本語|instance_type|t3.small|t3.medium|t3.large|Unicode文字のテスト：日本語コメント|
 

@@ -17,7 +17,7 @@ type AnalyzerServiceInterface interface {
 
 // OutputServiceInterface は出力サービスのインターフェース
 type OutputServiceInterface interface {
-	OutputResults(result *AnalysisResult, outputFile string, outputFlag bool, maxValueLength int) error
+	OutputResults(result *AnalysisResult, outputFile string, outputFlag bool, maxValueLength int, trimCell bool) error
 	PrintSummary(diffs []*types.DiffResult) (int, int)
 }
 
@@ -34,7 +34,7 @@ type DifferInterface interface {
 
 // ReporterInterface はレポート生成のインターフェース
 type ReporterInterface interface {
-	GenerateMarkdown(diffs []*types.DiffResult, envNames []string, ruleComments map[string]string, envResources map[string]*types.EnvResources, maxValueLength int) string
+	GenerateMarkdown(diffs []*types.DiffResult, envNames []string, ruleComments map[string]string, envResources map[string]*types.EnvResources, maxValueLength int, trimCell bool) string
 }
 
 // AnalysisResult は分析結果を表す（循環参照回避のためここに定義）

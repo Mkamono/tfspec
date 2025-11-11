@@ -15,18 +15,21 @@ import (
 type ResultReporter struct {
 	formatter       *parser.ValueFormatter
 	maxValueLength  int
+	trimCell        bool
 }
 
 func NewResultReporter() *ResultReporter {
 	return &ResultReporter{
 		formatter:      parser.NewValueFormatter(),
 		maxValueLength: 200, // デフォルト値
+		trimCell:       false,
 	}
 }
 
 // GenerateMarkdown は差分結果をMarkdownテーブル形式で出力する
-func (r *ResultReporter) GenerateMarkdown(diffs []*types.DiffResult, envNames []string, ruleComments map[string]string, envResources map[string]*types.EnvResources, maxValueLength int) string {
+func (r *ResultReporter) GenerateMarkdown(diffs []*types.DiffResult, envNames []string, ruleComments map[string]string, envResources map[string]*types.EnvResources, maxValueLength int, trimCell bool) string {
 	r.maxValueLength = maxValueLength
+	r.trimCell = trimCell
 	driftTable, ignoredTable := r.buildTables(diffs, envNames, ruleComments, envResources)
 	return r.generateMarkdownReport(driftTable, ignoredTable, envNames)
 }
@@ -468,5 +471,46 @@ func (r *ResultReporter) buildGroupedMarkdownTable(rows []types.GroupedTableRow,
 	table.Bulk(data)
 	table.Render()
 
-	return buffer.String()
+	result := buffer.String()
+
+	// trimCell オプションでセル内の前後の空白を削除
+	if r.trimCell {
+		result = r.trimCellPadding(result)
+	}
+
+	return result
+}
+
+// trimCellPadding はMarkdownテーブルのセル内の前後の余白を削除する
+func (r *ResultReporter) trimCellPadding(markdown string) string {
+	lines := strings.Split(markdown, "\n")
+	var result []string
+
+	for _, line := range lines {
+		// セパレータ行（|---|など）はそのまま
+		if strings.HasPrefix(strings.TrimSpace(line), "|") && !strings.Contains(line, " ") {
+			// セパレータ行の場合
+			result = append(result, line)
+		} else if strings.Contains(line, "|") {
+			// データ行またはヘッダー行：各セルの前後余白を削除
+			trimmed := r.trimTableLine(line)
+			result = append(result, trimmed)
+		} else {
+			result = append(result, line)
+		}
+	}
+
+	return strings.Join(result, "\n")
+}
+
+// trimTableLine はテーブルの1行内の各セルの前後余白を削除する
+func (r *ResultReporter) trimTableLine(line string) string {
+	parts := strings.Split(line, "|")
+	var trimmedParts []string
+
+	for _, part := range parts {
+		trimmedParts = append(trimmedParts, strings.TrimSpace(part))
+	}
+
+	return strings.Join(trimmedParts, "|")
 }

@@ -6,7 +6,8 @@
       "Bash(go run:*)",
       "Bash(go mod:*)",
       "Bash(find:*)",
-      "WebSearch"
+      "WebSearch",
+      "Bash(go doc:*)"
     ],
     "deny": [],
     "ask": []

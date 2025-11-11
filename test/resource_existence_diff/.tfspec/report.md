@@ -6,8 +6,8 @@
 
 ## 📝 無視された差分（意図的）
 
-| リソースタイプ |              リソース名              |     属性パス     | ENV 1 | ENV 2 | ENV 3 |                         理由                          |
+|リソースタイプ|リソース名|属性パス|ENV 1|ENV 2|ENV 3|理由|
 |:--------------:|:------------------------------------:|:----------------:|:-----:|:-----:|:-----:|:-----------------------------------------------------:|
-|    resource    | aws_cloudwatch_metric_alarm.high_cpu |                  |  ❌   |  ❌   |  ✅   | 本番環境でのSLA保証のための必須監視（他環境では不要） |
-|                |           aws_instance.web           | tags.Environment | env1  | env2  | env3  |               環境識別タグの意図的差分                |
+|resource|aws_cloudwatch_metric_alarm.high_cpu||❌|❌|✅|本番環境でのSLA保証のための必須監視（他環境では不要）|
+||aws_instance.web|tags.Environment|env1|env2|env3|環境識別タグの意図的差分|
 

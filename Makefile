@@ -20,8 +20,8 @@ build: ## tfspecバイナリをビルド
 	@echo "✅ Build completed: $(BINARY_NAME)"
 
 .PHONY: test-all
-test-all: build ## 全テストケースでreport.mdを生成（no-fail使用）
-	@echo "🚀 Running tests on all test cases with --no-fail..."
+test-all: build ## 全テストケースでreport.mdを生成（no-fail使用、--trim-cell付き）
+	@echo "🚀 Running tests on all test cases with --no-fail and --trim-cell..."
 	@echo "📁 Test cases found: $(words $(TEST_CASES)) cases"
 	@echo "Test cases: $(TEST_CASES)"
 	@echo ""
@@ -30,7 +30,7 @@ test-all: build ## 全テストケースでreport.mdを生成（no-fail使用）
 		echo "🔍 Testing: $$testcase"; \
 		if [ -d "test/$$testcase" ]; then \
 			cd test/$$testcase && \
-			if ../../$(BINARY_NAME) check --no-fail -o; then \
+			if ../../$(BINARY_NAME) check --no-fail --trim-cell -o; then \
 				echo "✅ $$testcase: report.md generated successfully"; \
 			else \
 				echo "❌ $$testcase: failed to generate report.md"; \
@@ -54,7 +54,7 @@ test-all: build ## 全テストケースでreport.mdを生成（no-fail使用）
 	fi
 
 .PHONY: test-case
-test-case: build ## 特定のテストケースでreport.mdを生成（例: make test-case CASE=basic_attribute_diff）
+test-case: build ## 特定のテストケースでreport.mdを生成（例: make test-case CASE=basic_attribute_diff、--trim-cell付き）
 ifndef CASE
 	@echo "❌ エラー: CASE変数を指定してください"
 	@echo "例: make test-case CASE=basic_attribute_diff"
@@ -65,7 +65,7 @@ endif
 	@if [ -d "test/$(CASE)" ]; then \
 		cd test/$(CASE) && \
 		echo "Generating report for $(CASE)..." && \
-		../../$(BINARY_NAME) check --no-fail -o && \
+		../../$(BINARY_NAME) check --no-fail --trim-cell -o && \
 		echo "✅ $(CASE): report.md generated at test/$(CASE)/.tfspec/report.md" && \
 		cd ../..; \
 	else \

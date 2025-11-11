@@ -22,13 +22,14 @@ func NewOutputService() *OutputService {
 }
 
 // OutputResults は結果を出力する
-func (s *OutputService) OutputResults(result *interfaces.AnalysisResult, outputFile string, outputFlag bool, maxValueLength int) error {
+func (s *OutputService) OutputResults(result *interfaces.AnalysisResult, outputFile string, outputFlag bool, maxValueLength int, trimCell bool) error {
 	markdownOutput := s.reporter.GenerateMarkdown(
 		result.Diffs,
 		result.EnvNames,
 		result.RuleComments,
 		result.EnvResources,
 		maxValueLength,
+		trimCell,
 	)
 
 	// コンソール出力
