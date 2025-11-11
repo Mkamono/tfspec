@@ -180,14 +180,34 @@ func (r *ResultReporter) getVariableValue(envResource *types.EnvResources, resou
 	return "-"
 }
 
-// findResource はリソースを名前で検索する
+// findResource はリソースを名前で検索する（通常のresourceとdataリソース両方に対応）
 func (r *ResultReporter) findResource(envResources *types.EnvResources, resourceName string) *types.EnvResource {
+	// 通常のリソースを検索
 	for _, resource := range envResources.Resources {
 		fullName := resource.Type + "." + resource.Name
 		if fullName == resourceName {
 			return resource
 		}
 	}
+
+	// dataリソースを検索（data.aws_ami.ubuntu形式）
+	if strings.HasPrefix(resourceName, "data.") {
+		// "data." プレフィックスを削除
+		nameWithoutPrefix := strings.TrimPrefix(resourceName, "data.")
+		for _, dataSource := range envResources.DataSources {
+			fullName := dataSource.Type + "." + dataSource.Name
+			if fullName == nameWithoutPrefix {
+				// EnvData を EnvResource として扱えるように変換
+				return &types.EnvResource{
+					Type:   dataSource.Type,
+					Name:   dataSource.Name,
+					Attrs:  dataSource.Attrs,
+					Blocks: dataSource.Blocks,
+				}
+			}
+		}
+	}
+
 	return nil
 }
 
@@ -321,12 +341,8 @@ func (r *ResultReporter) parseResourceName(resource string) (string, string) {
 		return "variable", after
 	}
 	if after, found := strings.CutPrefix(resource, "data."); found {
-		// data.aws_instance.web -> type: data.aws_instance, name: web
-		parts := strings.SplitN(after, ".", 2)
-		if len(parts) >= 2 {
-			return "data." + parts[0], parts[1]
-		}
-		return "data", resource
+		// data.aws_ami -> type: data, name: aws_ami
+		return "data", after
 	}
 
 	// 通常のリソース（aws_instance.web -> type: resource, name: aws_instance.web）
