@@ -250,17 +250,17 @@ func (r *ResultReporter) generateMarkdownReport(driftTable, ignoredTable []types
 
 	// 意図されていない差分テーブル
 	if len(driftTable) > 0 {
-		md.WriteString("## 🚨 意図されていない差分\n\n")
+		md.WriteString("## 意図されていない差分\n\n")
 		md.WriteString(r.buildHierarchicalMarkdownTable(driftTable, envNames, false))
 		md.WriteString("\n")
 	} else {
-		md.WriteString("## ✅ 意図されていない差分\n\n")
+		md.WriteString("## 意図されていない差分\n\n")
 		md.WriteString("意図されていない差分は検出されませんでした。\n\n")
 	}
 
 	// 無視された差分テーブル
 	if len(ignoredTable) > 0 {
-		md.WriteString("## 📝 無視された差分（意図的）\n\n")
+		md.WriteString("## 無視された差分（意図的）\n\n")
 		md.WriteString(r.buildHierarchicalMarkdownTable(ignoredTable, envNames, true))
 		md.WriteString("\n")
 	}
