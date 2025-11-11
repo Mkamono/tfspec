@@ -48,12 +48,12 @@ func (r *ResultReporter) buildTables(diffs []*types.DiffResult, envNames []strin
 		// 値の設定
 		if diff.Path == "" && strings.HasPrefix(diff.Resource, "local.") {
 			// local存在差分の場合は実際の値を取得
-			row.Values[diff.Environment] = r.getLocalValue(envResources[diff.Environment], diff.Resource)
+			row.Values[diff.Environment] = r.getLocalValueMarkdown(envResources[diff.Environment], diff.Resource)
 		} else if diff.Path == "" && strings.HasPrefix(diff.Resource, "var.") {
 			// variable存在差分の場合は実際の値を取得
-			row.Values[diff.Environment] = r.getVariableValue(envResources[diff.Environment], diff.Resource)
+			row.Values[diff.Environment] = r.getVariableValueMarkdown(envResources[diff.Environment], diff.Resource)
 		} else {
-			row.Values[diff.Environment] = r.formatter.FormatValue(diff.Actual)
+			row.Values[diff.Environment] = r.formatter.FormatValueWithMarkdown(diff.Actual)
 		}
 
 		// 期待値があればベース環境の値として設定
@@ -62,12 +62,12 @@ func (r *ResultReporter) buildTables(diffs []*types.DiffResult, envNames []strin
 			if _, exists := row.Values[baseEnv]; !exists {
 				if diff.Path == "" && strings.HasPrefix(diff.Resource, "local.") {
 					// local存在差分の場合は実際の値を取得
-					row.Values[baseEnv] = r.getLocalValue(envResources[baseEnv], diff.Resource)
+					row.Values[baseEnv] = r.getLocalValueMarkdown(envResources[baseEnv], diff.Resource)
 				} else if diff.Path == "" && strings.HasPrefix(diff.Resource, "var.") {
 					// variable存在差分の場合は実際の値を取得
-					row.Values[baseEnv] = r.getVariableValue(envResources[baseEnv], diff.Resource)
+					row.Values[baseEnv] = r.getVariableValueMarkdown(envResources[baseEnv], diff.Resource)
 				} else {
-					row.Values[baseEnv] = r.formatter.FormatValue(diff.Expected)
+					row.Values[baseEnv] = r.formatter.FormatValueWithMarkdown(diff.Expected)
 				}
 			}
 		}
@@ -122,17 +122,17 @@ func (r *ResultReporter) fillMissingValues(rows map[string]*types.TableRow, envN
 			if envResource, exists := envResources[envName]; exists {
 				if row.Path == "" && strings.HasPrefix(row.Resource, "local.") {
 					// local値の補填
-					row.Values[envName] = r.getLocalValue(envResource, row.Resource)
+					row.Values[envName] = r.getLocalValueMarkdown(envResource, row.Resource)
 				} else if row.Path == "" && strings.HasPrefix(row.Resource, "var.") {
 					// variable値の補填
-					row.Values[envName] = r.getVariableValue(envResource, row.Resource)
+					row.Values[envName] = r.getVariableValueMarkdown(envResource, row.Resource)
 				} else {
 					// 通常のリソース処理
 					resource := r.findResource(envResource, row.Resource)
 					if resource != nil {
 						value := r.getResourceValue(resource, row.Path)
 						if !value.IsNull() {
-							row.Values[envName] = r.formatter.FormatValue(value)
+							row.Values[envName] = r.formatter.FormatValueWithMarkdown(value)
 						} else {
 							row.Values[envName] = ""
 						}
@@ -160,6 +160,21 @@ func (r *ResultReporter) getLocalValue(envResource *types.EnvResources, resource
 	return "-"
 }
 
+// getLocalValueMarkdown はlocal値をマークダウン形式で取得する
+func (r *ResultReporter) getLocalValueMarkdown(envResource *types.EnvResources, resourceName string) string {
+	if envResource == nil {
+		return "-"
+	}
+
+	localName := strings.TrimPrefix(resourceName, "local.")
+	for _, local := range envResource.Locals {
+		if local.Name == localName {
+			return r.formatter.FormatValueWithMarkdown(local.Value)
+		}
+	}
+	return "-"
+}
+
 // getVariableValue はvariable値を取得する
 func (r *ResultReporter) getVariableValue(envResource *types.EnvResources, resourceName string) string {
 	if envResource == nil {
@@ -173,6 +188,26 @@ func (r *ResultReporter) getVariableValue(envResource *types.EnvResources, resou
 				return r.formatter.FormatValue(defaultVal)
 			} else if descVal, hasDesc := variable.Attrs["description"]; hasDesc && !descVal.IsNull() {
 				return r.formatter.FormatValue(descVal)
+			}
+			return "-"
+		}
+	}
+	return "-"
+}
+
+// getVariableValueMarkdown はvariable値をマークダウン形式で取得する
+func (r *ResultReporter) getVariableValueMarkdown(envResource *types.EnvResources, resourceName string) string {
+	if envResource == nil {
+		return "-"
+	}
+
+	varName := strings.TrimPrefix(resourceName, "var.")
+	for _, variable := range envResource.Variables {
+		if variable.Name == varName {
+			if defaultVal, hasDefault := variable.Attrs["default"]; hasDefault && !defaultVal.IsNull() {
+				return r.formatter.FormatValueWithMarkdown(defaultVal)
+			} else if descVal, hasDesc := variable.Attrs["description"]; hasDesc && !descVal.IsNull() {
+				return r.formatter.FormatValueWithMarkdown(descVal)
 			}
 			return "-"
 		}

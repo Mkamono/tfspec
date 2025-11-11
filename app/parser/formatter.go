@@ -8,10 +8,19 @@ import (
 )
 
 // ValueFormatter は値のフォーマット処理を担当する
-type ValueFormatter struct{}
+type ValueFormatter struct{
+	useMarkdownLineBreaks bool
+}
 
 func NewValueFormatter() *ValueFormatter {
 	return &ValueFormatter{}
+}
+
+// FormatValueWithMarkdown は値を文字列形式でフォーマット（マークダウン対応）
+func (f *ValueFormatter) FormatValueWithMarkdown(val interface{}) string {
+	f.useMarkdownLineBreaks = true
+	defer func() { f.useMarkdownLineBreaks = false }()
+	return f.FormatValue(val)
 }
 
 // FormatValue は値を文字列形式でフォーマットする
@@ -62,6 +71,11 @@ func (f *ValueFormatter) formatListValue(ctyVal cty.Value) string {
 		_, val := it.Element()
 		elements = append(elements, f.FormatValue(val))
 	}
+
+	if f.useMarkdownLineBreaks && len(elements) > 2 {
+		// 複数要素の場合は改行で区切る
+		return fmt.Sprintf("[%s]", strings.Join(elements, "<br>"))
+	}
 	return fmt.Sprintf("[%s]", strings.Join(elements, ", "))
 }
 
@@ -70,6 +84,11 @@ func (f *ValueFormatter) formatMapValue(ctyVal cty.Value) string {
 	for it := ctyVal.ElementIterator(); it.Next(); {
 		key, val := it.Element()
 		pairs = append(pairs, fmt.Sprintf("%s: %s", f.FormatValue(key), f.FormatValue(val)))
+	}
+
+	if f.useMarkdownLineBreaks && len(pairs) > 2 {
+		// 複数ペアの場合は改行で区切る
+		return fmt.Sprintf("{%s}", strings.Join(pairs, "<br>"))
 	}
 	return fmt.Sprintf("{%s}", strings.Join(pairs, ", "))
 }
