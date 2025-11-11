@@ -10,6 +10,7 @@ import (
 // ValueFormatter は値のフォーマット処理を担当する
 type ValueFormatter struct{
 	useMarkdownLineBreaks bool
+	maxLength             int
 }
 
 func NewValueFormatter() *ValueFormatter {
@@ -17,10 +18,23 @@ func NewValueFormatter() *ValueFormatter {
 }
 
 // FormatValueWithMarkdown は値を文字列形式でフォーマット（マークダウン対応）
-func (f *ValueFormatter) FormatValueWithMarkdown(val interface{}) string {
+func (f *ValueFormatter) FormatValueWithMarkdown(val interface{}, maxLength ...int) string {
 	f.useMarkdownLineBreaks = true
-	defer func() { f.useMarkdownLineBreaks = false }()
-	return f.FormatValue(val)
+	if len(maxLength) > 0 {
+		f.maxLength = maxLength[0]
+	}
+	defer func() {
+		f.useMarkdownLineBreaks = false
+		f.maxLength = 0
+	}()
+	result := f.FormatValue(val)
+
+	// 最大文字数を超えた場合は省略
+	if f.maxLength > 0 && len(result) > f.maxLength {
+		result = result[:f.maxLength] + "..."
+	}
+
+	return result
 }
 
 // FormatValue は値を文字列形式でフォーマットする

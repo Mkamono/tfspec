@@ -2,7 +2,7 @@
 module "vpc" {
   source = "./modules/vpc"
 
-  vpc_cidr = "10.0.0.0/16"
+  vpc_cidr    = "10.0.0.0/16"
   environment = "dev"
 }
 
@@ -17,13 +17,13 @@ locals {
 
   # Boolean locals のテスト
   enable_monitoring = true
-  enable_backup = false
+  enable_backup     = false
 
   # Object locals のテスト
   database_config = {
-    engine         = "mysql"
-    engine_version = "8.0"
-    multi_az       = true
+    engine                  = "mysql"
+    engine_version          = "8.0"
+    multi_az                = true
     backup_retention_period = 7
   }
 
@@ -35,14 +35,39 @@ locals {
 
   # HCL関数を含むローカル変数
   name_with_length = length(var.instance_type)
-  merged_tags = merge(local.common_tags, { "AdditionalTag" = "value" })
-  name_prefix = "app-${var.instance_type}"
-  file_content = file("${path.module}/config.txt")
+  merged_tags      = merge(local.common_tags, { "AdditionalTag" = "value" })
+  name_prefix      = "app-${var.instance_type}"
+  file_content     = file("${path.module}/config.txt")
 
   # env1のみに存在するオブジェクト
   dev_only_config = {
     debug_mode = true
     log_level  = "debug"
+  }
+
+  long_object = {
+    level1 = {
+      level2 = {
+        level3_1 = {
+          key             = "deep_value"
+          another_key     = "another_value"
+          yet_another_key = "yet_another_value"
+          deep_nested_key = "deep_nested_value"
+        }
+        level3_2 = {
+          key             = "deep_value"
+          another_key     = "another_value"
+          yet_another_key = "yet_another_value"
+          deep_nested_key = "deep_nested_value"
+        }
+        level3_3 = {
+          key             = "deep_value"
+          another_key     = "another_value"
+          yet_another_key = "yet_another_value"
+          deep_nested_key = "deep_nested_value"
+        }
+      }
+    }
   }
 }
 

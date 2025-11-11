@@ -13,17 +13,20 @@ import (
 
 // ResultReporter はテーブル形式の結果出力を担当する
 type ResultReporter struct {
-	formatter *parser.ValueFormatter
+	formatter       *parser.ValueFormatter
+	maxValueLength  int
 }
 
 func NewResultReporter() *ResultReporter {
 	return &ResultReporter{
-		formatter: parser.NewValueFormatter(),
+		formatter:      parser.NewValueFormatter(),
+		maxValueLength: 200, // デフォルト値
 	}
 }
 
 // GenerateMarkdown は差分結果をMarkdownテーブル形式で出力する
-func (r *ResultReporter) GenerateMarkdown(diffs []*types.DiffResult, envNames []string, ruleComments map[string]string, envResources map[string]*types.EnvResources) string {
+func (r *ResultReporter) GenerateMarkdown(diffs []*types.DiffResult, envNames []string, ruleComments map[string]string, envResources map[string]*types.EnvResources, maxValueLength int) string {
+	r.maxValueLength = maxValueLength
 	driftTable, ignoredTable := r.buildTables(diffs, envNames, ruleComments, envResources)
 	return r.generateMarkdownReport(driftTable, ignoredTable, envNames)
 }
@@ -53,7 +56,7 @@ func (r *ResultReporter) buildTables(diffs []*types.DiffResult, envNames []strin
 			// variable存在差分の場合は実際の値を取得
 			row.Values[diff.Environment] = r.getVariableValueMarkdown(envResources[diff.Environment], diff.Resource)
 		} else {
-			row.Values[diff.Environment] = r.formatter.FormatValueWithMarkdown(diff.Actual)
+			row.Values[diff.Environment] = r.formatter.FormatValueWithMarkdown(diff.Actual, r.maxValueLength)
 		}
 
 		// 期待値があればベース環境の値として設定
@@ -67,7 +70,7 @@ func (r *ResultReporter) buildTables(diffs []*types.DiffResult, envNames []strin
 					// variable存在差分の場合は実際の値を取得
 					row.Values[baseEnv] = r.getVariableValueMarkdown(envResources[baseEnv], diff.Resource)
 				} else {
-					row.Values[baseEnv] = r.formatter.FormatValueWithMarkdown(diff.Expected)
+					row.Values[baseEnv] = r.formatter.FormatValueWithMarkdown(diff.Expected, r.maxValueLength)
 				}
 			}
 		}
@@ -132,7 +135,7 @@ func (r *ResultReporter) fillMissingValues(rows map[string]*types.TableRow, envN
 					if resource != nil {
 						value := r.getResourceValue(resource, row.Path)
 						if !value.IsNull() {
-							row.Values[envName] = r.formatter.FormatValueWithMarkdown(value)
+							row.Values[envName] = r.formatter.FormatValueWithMarkdown(value, r.maxValueLength)
 						} else {
 							row.Values[envName] = ""
 						}
@@ -169,7 +172,7 @@ func (r *ResultReporter) getLocalValueMarkdown(envResource *types.EnvResources, 
 	localName := strings.TrimPrefix(resourceName, "local.")
 	for _, local := range envResource.Locals {
 		if local.Name == localName {
-			return r.formatter.FormatValueWithMarkdown(local.Value)
+			return r.formatter.FormatValueWithMarkdown(local.Value, r.maxValueLength)
 		}
 	}
 	return "-"
@@ -205,9 +208,9 @@ func (r *ResultReporter) getVariableValueMarkdown(envResource *types.EnvResource
 	for _, variable := range envResource.Variables {
 		if variable.Name == varName {
 			if defaultVal, hasDefault := variable.Attrs["default"]; hasDefault && !defaultVal.IsNull() {
-				return r.formatter.FormatValueWithMarkdown(defaultVal)
+				return r.formatter.FormatValueWithMarkdown(defaultVal, r.maxValueLength)
 			} else if descVal, hasDesc := variable.Attrs["description"]; hasDesc && !descVal.IsNull() {
-				return r.formatter.FormatValueWithMarkdown(descVal)
+				return r.formatter.FormatValueWithMarkdown(descVal, r.maxValueLength)
 			}
 			return "-"
 		}

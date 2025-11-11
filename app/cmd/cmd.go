@@ -40,7 +40,8 @@ func (app *TfspecApp) CreateRootCommand() *cobra.Command {
 			outputFlag := cmd.Flags().Changed("output")
 			noFail, _ := cmd.Flags().GetBool("no-fail")
 			excludeDirs, _ := cmd.Flags().GetStringSlice("exclude-dirs")
-			return app.appService.RunCheck(args, verbose, outputFile, outputFlag, noFail, excludeDirs)
+			maxValueLength, _ := cmd.Flags().GetInt("max-value-length")
+			return app.appService.RunCheck(args, verbose, outputFile, outputFlag, noFail, excludeDirs, maxValueLength)
 		},
 	}
 
@@ -49,6 +50,7 @@ func (app *TfspecApp) CreateRootCommand() *cobra.Command {
 	checkCmd.Flags().Lookup("output").NoOptDefVal = ".tfspec/report.md"
 	checkCmd.Flags().Bool("no-fail", false, "構成ドリフトが検出されてもエラーコードで終了しない")
 	checkCmd.Flags().StringSliceP("exclude-dirs", "e", []string{}, "除外するディレクトリ名 (例: --exclude-dirs node_modules,vendor)")
+	checkCmd.Flags().Int("max-value-length", 200, "テーブルに表示する値の最大文字数 (デフォルト: 200)")
 
 	rootCmd.AddCommand(checkCmd)
 	return rootCmd
